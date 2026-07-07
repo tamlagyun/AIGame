@@ -1,153 +1,147 @@
-# HeroBattleBeasts Game Design
+# HeroBattleBeasts 游戏设计
 
-## 1. Project Direction
+## 1. 项目方向
 
-`HeroBattleBeasts` is a cartoon 2D side-scrolling action game prototype. The first playable version should combine:
+`HeroBattleBeasts` 是一个卡通 2D 横版动作游戏原型。第一版可玩版本需要融合两类体验：
 
-- Contra-style run-and-gun action: fast movement, jumping, shooting, enemy waves, and weapon pickups.
-- MapleStory-style platform adventure: layered platforms, cute monsters, coins, simple exploration, and a clear stage goal.
+- 魂斗罗式跑跳射击：快速移动、跳跃、射击、敌人波次、武器强化。
+- 冒险岛式平台冒险：多层平台、可爱怪物、金币收集、轻探索、明确的关卡目标。
 
-The first version should be small, playable, and easy to expand.
+第一版目标是小而可玩，便于后续扩展。
 
-## 2. Technical Route
+## 2. 技术路线
 
-The first implementation should use a pure Web prototype:
+正式工程路线采用 Cocos Creator 3.8.x + TypeScript。
 
-- HTML for the game shell.
-- CSS for layout and cartoon presentation.
-- JavaScript with Canvas for gameplay rendering.
-- No external runtime dependency for the first playable version.
+原因：
 
-Reasoning:
+- 后续需要发布到 Android、iOS、微信小游戏、抖音小游戏、鸿蒙平台。
+- Cocos Creator 对 2D、动画、音频、UI、资源管理和多平台发布更合适。
+- TypeScript 便于拆分核心玩法逻辑，并为后续测试和维护提供类型约束。
 
-- It can run quickly in a browser.
-- It avoids blocking on a full Cocos Creator project setup.
-- It keeps the first prototype easy to inspect, test, and revise.
-- Cocos Creator can still be considered later if the prototype direction is approved.
+早期可以使用编辑器预览和 Web 预览快速验证手感，但正式结构应按 Cocos 项目组织。
 
-## 3. First Playable Scope
+## 3. 第一版可玩范围
 
-The first playable version should include one short level with these behaviors:
+第一版只做一个短关卡，包含以下行为：
 
-- Player can move left and right.
-- Player can jump and land on platforms.
-- Player can shoot horizontally.
-- Basic enemies patrol or move toward the player.
-- Bullets can defeat enemies.
-- Enemy contact damages the player.
-- Coins or gems can be collected.
-- A weapon pickup temporarily improves shooting.
-- Reaching the exit or defeating enough enemies completes the level.
-- Losing all health shows a retry state.
+- 玩家可以左右移动。
+- 玩家可以跳跃并落在平台上。
+- 玩家可以水平射击。
+- 基础敌人会巡逻或靠近玩家。
+- 子弹可以击败敌人。
+- 敌人接触会伤害玩家。
+- 金币或宝石可以被收集。
+- 武器强化道具可以临时提升射击能力。
+- 击败足够敌人或到达出口后通关。
+- 生命值耗尽后显示失败和重试状态。
 
-This scope is intentionally narrow. It proves the combined gameplay loop before adding menus, multiple levels, bosses, mobile controls, audio, or persistent progression.
+该范围刻意保持克制，用于先验证“横版平台 + 跑跳射击 + 收集通关”的核心闭环。
 
-## 4. Cartoon Visual Direction
+## 4. 卡通视觉方向
 
-The first visual theme should be a bright beast forest:
+第一版视觉主题建议为“明亮怪兽森林”：
 
-- Hero: small cartoon adventurer with a toy-like blaster.
-- Enemies: cute beast monsters, such as round slimes, horned critters, and flying bugs.
-- Level: grass platforms, tree roots, wooden bridges, and soft cloud shapes.
-- Pickups: shiny coins, colorful energy gems, and a glowing weapon badge.
-- Tone: cheerful, readable, and action-focused.
+- 主角：小型卡通冒险者，使用玩具感能量枪。
+- 敌人：可爱的怪兽，例如圆形史莱姆、带角小怪、飞行虫。
+- 关卡：草地平台、树根、木桥、柔和云朵。
+- 道具：闪亮金币、彩色能量宝石、发光武器徽章。
+- 整体气质：明亮、清晰、轻快，但动作反馈要明确。
 
-This theme supports both MapleStory-like platform charm and Contra-like combat readability.
+该主题同时支持冒险岛式可爱平台感和魂斗罗式战斗可读性。
 
-## 5. Core Game Loop
+## 5. 核心循环
 
-1. Player enters a short side-scrolling level.
-2. Player jumps across platforms while avoiding enemies.
-3. Player shoots enemies and collects coins.
-4. Player picks up a temporary weapon boost.
-5. Player reaches the exit after clearing the main encounter.
-6. Game shows win, lose, or retry state.
+1. 玩家进入短关卡。
+2. 玩家在平台间跳跃，躲避敌人。
+3. 玩家射击敌人并收集金币。
+4. 玩家拾取临时武器强化。
+5. 玩家清理主要遭遇战并到达出口。
+6. 游戏显示胜利、失败或重试状态。
 
-## 6. Controls
+## 6. 操作设计
 
-Desktop controls for the first prototype:
+桌面预览阶段的默认操作：
 
-- `A` / `ArrowLeft`: move left.
-- `D` / `ArrowRight`: move right.
-- `W` / `ArrowUp` / `Space`: jump.
-- `J` / `Z`: shoot.
-- `R`: restart after win or loss.
+- `A` / `ArrowLeft`：向左移动。
+- `D` / `ArrowRight`：向右移动。
+- `W` / `ArrowUp` / `Space`：跳跃。
+- `J` / `Z`：射击。
+- `R`：胜利或失败后重开。
 
-Mobile touch controls are out of scope for the first playable version unless confirmed in a later step.
+移动端虚拟摇杆和触摸按钮后续单独确认，不纳入第一版最小玩法实现。
 
-## 7. Main Entities
+## 7. 主要实体
 
-### Player
+### 玩家
 
-- Position, velocity, facing direction.
-- Health.
-- Grounded state.
-- Weapon state.
-- Invulnerability window after damage.
+- 位置、速度、朝向。
+- 生命值。
+- 是否在地面。
+- 当前武器状态。
+- 受伤后的短暂无敌时间。
 
-### Enemy
+### 敌人
 
-- Position, size, health.
-- Movement behavior.
-- Contact damage.
-- Defeated state.
+- 位置、尺寸、生命值。
+- 移动行为。
+- 接触伤害。
+- 击败状态。
 
-### Bullet
+### 子弹
 
-- Position and velocity.
-- Owner.
-- Damage.
-- Lifetime.
+- 位置和速度。
+- 发射者。
+- 伤害。
+- 存活时间。
 
-### Pickup
+### 道具
 
-- Type: coin, gem, weapon boost, health.
-- Position.
-- Collected state.
+- 类型：金币、宝石、武器强化、生命恢复。
+- 位置。
+- 是否已收集。
 
-### Level
+### 关卡
 
-- Platforms.
-- Spawn points.
-- Enemy list.
-- Pickup list.
-- Exit area.
+- 平台。
+- 出生点。
+- 敌人列表。
+- 道具列表。
+- 出口区域。
 
-## 8. UI Requirements
+## 8. UI 要求
 
-The first prototype should display:
+第一版原型需要显示：
 
-- Player health.
-- Coin count.
-- Enemy defeat count or objective progress.
-- Current weapon state.
-- Win/lose overlay with restart instruction.
+- 玩家生命值。
+- 金币数量。
+- 敌人击败数量或目标进度。
+- 当前武器状态。
+- 胜利/失败提示和重开说明。
 
-The UI should stay compact and not block gameplay.
+UI 应保持紧凑，不遮挡主要战斗区域。
 
-## 9. Implementation Steps After This Design
+## 9. 后续实施步骤建议
 
-Recommended next steps:
+1. 创建 Cocos 兼容工程骨架。
+2. 建立核心玩法模块和平台抽象接口。
+3. 添加关卡、角色、敌人、武器和道具配置。
+4. 实现玩家移动、重力、跳跃和平台碰撞。
+5. 实现射击、子弹、敌人和命中判定。
+6. 实现金币、武器强化、生命值、胜负状态和 HUD。
+7. 添加卡通占位美术和基础动效。
+8. 为核心逻辑添加可重复运行的验证。
 
-1. Create the Web project skeleton: `index.html`, `src/`, `assets/`, and a local preview command or simple static file path.
-2. Implement the core game loop and canvas renderer.
-3. Add player movement, gravity, jumping, and platform collision.
-4. Add shooting, bullets, enemies, and hit detection.
-5. Add coins, weapon pickup, health, win/lose states, and HUD.
-6. Add simple cartoon placeholder art using Canvas drawing or lightweight local assets.
-7. Add repeatable verification for core gameplay logic where practical.
+每个步骤都必须先列计划，等待用户确认后再实施。
 
-Each step must be planned and confirmed before implementation.
+## 10. 第一版暂不包含
 
-## 10. Out of Scope for First Playable Version
+- 多关卡。
+- Boss 战。
+- 存档。
+- 移动端触摸操作。
+- 网络功能。
+- 最终商业美术。
+- 完整音效和音乐。
 
-- Multiple levels.
-- Boss fights.
-- Save data.
-- Mobile touch controls.
-- Network features.
-- Full Cocos Creator integration.
-- Final production art.
-- Audio and music.
-
-These can be added after the first playable loop is working and approved.
+这些内容应在第一版核心玩法闭环跑通后，再按步骤确认并加入。
