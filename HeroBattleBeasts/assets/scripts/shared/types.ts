@@ -14,6 +14,7 @@ export type InputCommand = {
   jumpPressed: boolean;
   shootPressed: boolean;
   pausePressed: boolean;
+  restartPressed?: boolean;
 };
 
 export type Vector2 = {

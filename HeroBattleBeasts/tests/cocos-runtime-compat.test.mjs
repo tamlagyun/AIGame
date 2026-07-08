@@ -51,7 +51,7 @@ test('Cocos component TypeScript entry exists with concrete class implementation
 });
 
 test('runtime bootstrap uses a Cocos preview safe timer', () => {
-  const bootstrapPath = fromRoot('assets/scripts/runtime/GameBootstrap.ts');
+  const bootstrapPath = fromRoot('assets/scripts/cocos/GameBootstrap.ts');
   const content = readFileSync(bootstrapPath, 'utf8');
 
   assert.match(content, /\bDate\.now\(\)/);
@@ -59,7 +59,7 @@ test('runtime bootstrap uses a Cocos preview safe timer', () => {
 });
 
 test('runtime bootstrap sends normalized input commands into GameRuntime', () => {
-  const bootstrapPath = fromRoot('assets/scripts/runtime/GameBootstrap.ts');
+  const bootstrapPath = fromRoot('assets/scripts/cocos/GameBootstrap.ts');
   const content = readFileSync(bootstrapPath, 'utf8');
   const inputFactory = content.match(/function createInputCommand[\s\S]*?\n}/)?.[0] ?? '';
 
