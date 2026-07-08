@@ -12,17 +12,8 @@ import {
   input
 } from 'cc';
 import { GameRuntime } from '../runtime/GameRuntime';
-import type { InputCommand } from '../shared/types';
+import { normalizeKeyboardInput, cocosKeyCodeToWebCode, KEY_BINDINGS } from '../runtime/InputAdapter';
 import type { RuntimeViewModel } from '../runtime/RuntimeViewModel';
-
-type RuntimeInputState = {
-  left: boolean;
-  right: boolean;
-  up: boolean;
-  down: boolean;
-  jump: boolean;
-  shootQueued: boolean;
-};
 
 const BOOTSTRAP_FLAG = '__heroBattleBeastsCocosBootstrapStarted';
 const VIEW_WIDTH = 1280;
@@ -152,16 +143,9 @@ export function startCocosRuntimePreview(): void {
       weaponConfig,
       enemyConfig
     });
-    const inputState: RuntimeInputState = {
-      left: false,
-      right: false,
-      up: false,
-      down: false,
-      jump: false,
-      shootQueued: false
-    };
+    const activeKeys = new Set<string>();
 
-    bindKeyboard(inputState, runtime);
+    bindKeyboard(activeKeys, runtime);
     let lastTimeMs = Date.now();
 
     const update = () => {
@@ -169,8 +153,12 @@ export function startCocosRuntimePreview(): void {
       const deltaSeconds = Math.min(0.033, Math.max(0.001, (now - lastTimeMs) / 1000));
       lastTimeMs = now;
 
-      const viewModel = runtime.step(createInputCommand(inputState), deltaSeconds);
-      inputState.shootQueued = false;
+      const inputCommand = normalizeKeyboardInput(activeKeys);
+      const viewModel = runtime.step(inputCommand, deltaSeconds);
+
+      if (inputCommand.restartPressed) {
+        activeKeys.delete('KeyR');
+      }
 
       renderGame(graphics, viewModel);
       renderHud(statusLabel, helpLabel, viewModel);
@@ -216,19 +204,6 @@ function ensureRenderNode(parent: Node, name: string): Node {
   return node;
 }
 
-function createInputCommand(inputState: RuntimeInputState): InputCommand {
-  const moveX: -1 | 0 | 1 = inputState.left === inputState.right ? 0 : inputState.right ? 1 : -1;
-  const aimY: -1 | 0 | 1 = inputState.up === inputState.down ? 0 : inputState.up ? -1 : 1;
-  return {
-    moveX,
-    aimX: moveX,
-    aimY,
-    jumpPressed: inputState.jump,
-    shootPressed: inputState.shootQueued,
-    pausePressed: false
-  };
-}
-
 function ensureLabel(parent: Node, name: string, fontSize: number, x: number, y: number): Label {
   const node = ensureNode(parent, name);
   node.setPosition(x, y);
@@ -243,65 +218,18 @@ function ensureLabel(parent: Node, name: string, fontSize: number, x: number, y:
   return label;
 }
 
-function bindKeyboard(inputState: RuntimeInputState, runtime: GameRuntime): void {
+function bindKeyboard(activeKeys: Set<string>, runtime: GameRuntime): void {
   input.on(Input.EventType.KEY_DOWN, (event) => {
-    switch (event.keyCode) {
-      case KeyCode.KEY_A:
-      case KeyCode.ARROW_LEFT:
-        inputState.left = true;
-        break;
-      case KeyCode.KEY_D:
-      case KeyCode.ARROW_RIGHT:
-        inputState.right = true;
-        break;
-      case KeyCode.KEY_W:
-      case KeyCode.ARROW_UP:
-        inputState.up = true;
-        inputState.jump = true;
-        break;
-      case KeyCode.SPACE:
-        inputState.jump = true;
-        break;
-      case KeyCode.KEY_S:
-      case KeyCode.ARROW_DOWN:
-        inputState.down = true;
-        break;
-      case KeyCode.KEY_J:
-      case KeyCode.KEY_Z:
-        inputState.shootQueued = true;
-        break;
-      case KeyCode.KEY_R:
-        runtime.restart();
-        break;
-      default:
-        break;
+    const webCode = cocosKeyCodeToWebCode(event.keyCode);
+    if (webCode) {
+      activeKeys.add(webCode);
     }
   });
 
   input.on(Input.EventType.KEY_UP, (event) => {
-    switch (event.keyCode) {
-      case KeyCode.KEY_A:
-      case KeyCode.ARROW_LEFT:
-        inputState.left = false;
-        break;
-      case KeyCode.KEY_D:
-      case KeyCode.ARROW_RIGHT:
-        inputState.right = false;
-        break;
-      case KeyCode.KEY_W:
-      case KeyCode.ARROW_UP:
-        inputState.up = false;
-        inputState.jump = false;
-        break;
-      case KeyCode.SPACE:
-        inputState.jump = false;
-        break;
-      case KeyCode.KEY_S:
-      case KeyCode.ARROW_DOWN:
-        inputState.down = false;
-        break;
-      default:
-        break;
+    const webCode = cocosKeyCodeToWebCode(event.keyCode);
+    if (webCode) {
+      activeKeys.delete(webCode);
     }
   });
 }

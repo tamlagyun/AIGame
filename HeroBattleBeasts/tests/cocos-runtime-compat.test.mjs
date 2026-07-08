@@ -61,13 +61,8 @@ test('runtime bootstrap uses a Cocos preview safe timer', () => {
 test('runtime bootstrap sends normalized input commands into GameRuntime', () => {
   const bootstrapPath = fromRoot('assets/scripts/cocos/GameBootstrap.ts');
   const content = readFileSync(bootstrapPath, 'utf8');
-  const inputFactory = content.match(/function createInputCommand[\s\S]*?\n}/)?.[0] ?? '';
 
-  assert.match(content, /runtime\.step\(createInputCommand\(inputState\), deltaSeconds\)/);
-  assert.match(inputFactory, /\bmoveX:/);
-  assert.match(inputFactory, /\bjumpPressed:/);
-  assert.match(inputFactory, /\bshootPressed:/);
-  assert.match(inputFactory, /\bpausePressed:/);
-  assert.doesNotMatch(inputFactory, /\bleft:/);
-  assert.doesNotMatch(inputFactory, /\bright:/);
+  assert.match(content, /import.*normalizeKeyboardInput.*from.*InputAdapter/);
+  assert.match(content, /normalizeKeyboardInput\(activeKeys\)/);
+  assert.match(content, /runtime\.step\(inputCommand, deltaSeconds\)/);
 });

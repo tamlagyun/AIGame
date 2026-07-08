@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const fromRoot = (...parts) => join(root, ...parts);
 
-function generateUuid() {
-  return crypto.randomUUID();
+function generateUuid(path) {
+  const hash = crypto.createHash('sha256').update(path).digest('hex');
+  return `${hash.substring(0, 8)}-${hash.substring(8, 12)}-${hash.substring(12, 16)}-${hash.substring(16, 20)}-${hash.substring(20, 32)}`;
 }
 
 // Template for directories
@@ -114,7 +115,7 @@ const scriptDirs = [
 console.log('--- Script subdirectory .meta ---');
 for (const dir of scriptDirs) {
   const dirPath = fromRoot(dir);
-  const uuid = generateUuid();
+  const uuid = generateUuid(dir);
   uuidMap[dir] = uuid;
   writeDirMeta(dirPath, uuid);
 }
@@ -150,7 +151,7 @@ const tsFiles = [
 console.log('\n--- TypeScript .meta ---');
 for (const file of tsFiles) {
   const filePath = fromRoot(file);
-  const uuid = generateUuid();
+  const uuid = generateUuid(file);
   uuidMap[file] = uuid;
   writeTsMeta(filePath, uuid);
 }
@@ -171,7 +172,7 @@ const jsFiles = [
 console.log('\n--- JavaScript .meta ---');
 for (const file of jsFiles) {
   const filePath = fromRoot(file);
-  const uuid = generateUuid();
+  const uuid = generateUuid(file);
   uuidMap[file] = uuid;
   writeJsMeta(filePath, uuid);
 }
@@ -187,7 +188,7 @@ const jsonFiles = [
 console.log('\n--- JSON config .meta ---');
 for (const file of jsonFiles) {
   const filePath = fromRoot(file);
-  const uuid = generateUuid();
+  const uuid = generateUuid(file);
   uuidMap[file] = uuid;
   writeJsonMeta(filePath, uuid);
 }
@@ -195,7 +196,7 @@ for (const file of jsonFiles) {
 // 5. Configs directory .meta
 const configsDir = fromRoot('assets/resources/configs');
 if (writeDirMeta.missing(configsDir)) {
-  writeDirMeta(configsDir, generateUuid());
+  writeDirMeta(configsDir, generateUuid('assets/resources/configs'));
 }
 
 console.log('\n=== Complete ===');
