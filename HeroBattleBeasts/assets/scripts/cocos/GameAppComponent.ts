@@ -1,6 +1,6 @@
 import { _decorator, Component } from 'cc';
 import { getCocosLayerPlan } from './CocosNodeNames';
-import { startCocosRuntimePreview } from '../runtime/GameBootstrap';
+import { startCocosRuntimePreview } from './GameBootstrap';
 
 const { ccclass } = _decorator;
 
@@ -24,8 +24,8 @@ export class GameAppComponent extends Component {
     return {
       componentName: this.componentName,
       requiredLayerNames: this.requiredLayerNames,
-      runtimeEntry: 'assets/scripts/runtime/GameRuntime',
-      binderEntry: 'assets/scripts/cocos/RuntimeNodeBinder',
+      runtimeEntry: 'GameRuntime',
+      binderEntry: 'RuntimeNodeBinder',
       ownsGameplayRules: this.ownsGameplayRules
     };
   }

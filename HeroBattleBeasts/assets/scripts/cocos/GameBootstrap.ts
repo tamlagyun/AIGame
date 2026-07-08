@@ -11,9 +11,9 @@ import {
   director,
   input
 } from 'cc';
-import { GameRuntime } from './GameRuntime';
+import { GameRuntime } from '../runtime/GameRuntime';
 import type { InputCommand } from '../shared/types';
-import type { RuntimeViewModel } from './RuntimeViewModel';
+import type { RuntimeViewModel } from '../runtime/RuntimeViewModel';
 
 type RuntimeInputState = {
   left: boolean;
@@ -308,10 +308,10 @@ function bindKeyboard(inputState: RuntimeInputState, runtime: GameRuntime): void
 
 function renderHud(statusLabel: Label, helpLabel: Label, viewModel: RuntimeViewModel): void {
   statusLabel.string = [
-    `HP ${viewModel.hud.healthText}`,
-    `Coin ${viewModel.hud.coinText}`,
-    `Score ${viewModel.hud.scoreText}`,
-    `Goal ${viewModel.hud.objectiveText}`,
+    'HP ' + viewModel.hud.healthText,
+    'Coin ' + viewModel.hud.coinText,
+    'Score ' + viewModel.hud.scoreText,
+    'Goal ' + viewModel.hud.objectiveText,
     viewModel.status.toUpperCase()
   ].join('   ');
   helpLabel.string = 'Move/Aim: WASD or Arrow  Jump: W/Space  Shoot: J/Z  Restart: R';

@@ -10,6 +10,7 @@ export function normalizeKeyboardInput(activeCodes) {
     aimY: up === down ? 0 : up ? -1 : 1,
     jumpPressed: up || activeCodes.has('Space'),
     shootPressed: activeCodes.has('KeyJ') || activeCodes.has('KeyZ'),
-    pausePressed: activeCodes.has('Escape') || activeCodes.has('KeyR')
+    pausePressed: activeCodes.has('Escape'),
+    restartPressed: activeCodes.has('KeyR')
   };
 }

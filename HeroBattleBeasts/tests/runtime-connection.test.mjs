@@ -47,7 +47,8 @@ test('keyboard input is normalized into platform neutral commands', () => {
     aimY: 0,
     jumpPressed: true,
     shootPressed: true,
-    pausePressed: false
+    pausePressed: false,
+    restartPressed: false
   });
 
   assert.deepEqual(normalizeKeyboardInput(new Set(['ArrowLeft', 'KeyR'])), {
@@ -56,7 +57,8 @@ test('keyboard input is normalized into platform neutral commands', () => {
     aimY: 0,
     jumpPressed: false,
     shootPressed: false,
-    pausePressed: true
+    pausePressed: false,
+    restartPressed: true
   });
 
   assert.deepEqual(normalizeKeyboardInput(new Set(['ArrowUp', 'KeyJ'])), {
@@ -65,7 +67,8 @@ test('keyboard input is normalized into platform neutral commands', () => {
     aimY: -1,
     jumpPressed: true,
     shootPressed: true,
-    pausePressed: false
+    pausePressed: false,
+    restartPressed: false
   });
 });
 
