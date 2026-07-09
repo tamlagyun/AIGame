@@ -1,6 +1,13 @@
 import { GameRuntime } from '../assets/scripts/runtime/GameRuntime.js';
 import { normalizeKeyboardInput } from '../assets/scripts/runtime/InputAdapter.js';
 
+// AI生成的主角精灵图
+let playerSprite = null;
+(function preloadPlayerSprite() {
+  playerSprite = new Image();
+  playerSprite.src = './player_hero.png';
+})();
+
 export function createPreviewInputState() {
   return {
     activeCodes: new Set()
@@ -333,109 +340,30 @@ function drawExit(context, exit, cameraX, time) {
 /* ───────── Player ───────── */
 
 function drawPlayer(context, position, facing, grounded, time) {
+  if (!playerSprite || !playerSprite.complete) {
+    // 图片未加载完成时绘制占位
+    context.fillStyle = '#ff7043';
+    context.fillRect(position.x - 16, position.y - 36, 32, 48);
+    return;
+  }
+
   const px = position.x;
   const py = position.y;
+  const w = 64;  // 角色显示宽度
+  const h = 80;  // 角色显示高度
 
   context.save();
   context.translate(px, py);
   context.scale(facing, 1);
 
-  // Shadow
+  // 影子
   context.fillStyle = 'rgba(0,0,0,0.15)';
   context.beginPath();
-  context.ellipse(0, 2, 16, 5, 0, 0, Math.PI * 2);
+  context.ellipse(0, h / 2 - 8, 16, 5, 0, 0, Math.PI * 2);
   context.fill();
 
-  // Legs
-  const legSwing = grounded ? Math.sin(time * 10) * 4 : 6;
-  context.fillStyle = '#5c3a1e';
-  context.fillRect(-10, -14, 7, 14);
-  context.fillRect(3, -14, 7, 14);
-  // Boots
-  context.fillStyle = '#3e2712';
-  roundRect(context, -12, -4, 10, 5, 2);
-  context.fill();
-  roundRect(context, 2, -4, 10, 5, 2);
-  context.fill();
-
-  // Body (armor)
-  const bodyGrad = context.createLinearGradient(-14, -44, 14, -14);
-  bodyGrad.addColorStop(0, '#e74c3c');
-  bodyGrad.addColorStop(0.5, '#c0392b');
-  bodyGrad.addColorStop(1, '#a93226');
-  context.fillStyle = bodyGrad;
-  roundRect(context, -14, -42, 28, 30, 4);
-  context.fill();
-
-  // Belt
-  context.fillStyle = '#8B6914';
-  context.fillRect(-14, -16, 28, 4);
-  context.fillStyle = '#ffd15c';
-  context.fillRect(-3, -17, 6, 6);
-
-  // Arms
-  context.fillStyle = '#e74c3c';
-  // Back arm
-  context.fillRect(-18, -38, 6, 18);
-  // Front arm holding weapon
-  context.save();
-  context.translate(14, -32);
-  context.rotate(Math.sin(time * 2) * 0.08);
-  context.fillRect(0, 0, 6, 16);
-  // Weapon (blaster)
-  context.fillStyle = '#555';
-  roundRect(context, 4, 12, 18, 6, 2);
-  context.fill();
-  context.fillStyle = '#00e5ff';
-  context.fillRect(20, 13, 4, 4);
-  context.restore();
-
-  // Head
-  context.fillStyle = '#ffe0b2';
-  context.beginPath();
-  context.arc(0, -54, 14, 0, Math.PI * 2);
-  context.fill();
-
-  // Hair
-  context.fillStyle = '#5d4037';
-  context.beginPath();
-  context.arc(0, -58, 14, Math.PI, Math.PI * 2);
-  context.fill();
-  context.fillRect(-14, -60, 28, 6);
-
-  // Eyes
-  context.fillStyle = '#fff';
-  context.beginPath();
-  context.arc(4, -56, 4, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = '#1a237e';
-  context.beginPath();
-  context.arc(5, -56, 2, 0, Math.PI * 2);
-  context.fill();
-  // Eye highlight
-  context.fillStyle = '#fff';
-  context.beginPath();
-  context.arc(6, -57, 0.8, 0, Math.PI * 2);
-  context.fill();
-
-  // Mouth
-  context.strokeStyle = '#a1887f';
-  context.lineWidth = 1;
-  context.beginPath();
-  context.arc(6, -50, 3, 0, Math.PI * 0.6);
-  context.stroke();
-
-  // Headband
-  context.fillStyle = '#ff7043';
-  context.fillRect(-14, -62, 28, 3);
-  // Headband tail
-  context.strokeStyle = '#ff7043';
-  context.lineWidth = 2.5;
-  context.beginPath();
-  context.moveTo(-14, -61);
-  const tailSway = Math.sin(time * 3) * 5;
-  context.quadraticCurveTo(-22, -58 + tailSway, -28, -55 + tailSway);
-  context.stroke();
+  // 绘制AI生成的主角图片
+  context.drawImage(playerSprite, -w / 2, -h + 10, w, h);
 
   context.restore();
 }

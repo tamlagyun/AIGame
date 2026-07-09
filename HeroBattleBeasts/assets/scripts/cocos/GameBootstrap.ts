@@ -3,13 +3,18 @@ import {
   Director,
   Graphics,
   HorizontalTextAlignment,
+  ImageAsset,
   Input,
   KeyCode,
   Label,
   Node,
+  Sprite,
+  SpriteFrame,
+  Texture2D,
   UITransform,
   director,
-  input
+  input,
+  resources
 } from 'cc';
 import { GameRuntime } from '../runtime/GameRuntime';
 import { normalizeKeyboardInput, cocosKeyCodeToWebCode, KEY_BINDINGS } from '../runtime/InputAdapter';
@@ -18,6 +23,9 @@ import type { RuntimeViewModel } from '../runtime/RuntimeViewModel';
 const BOOTSTRAP_FLAG = '__heroBattleBeastsCocosBootstrapStarted';
 const VIEW_WIDTH = 1280;
 const VIEW_HEIGHT = 720;
+
+// 模块级玩家精灵节点引用
+let sPlayerSpriteNode: Node | null = null;
 
 const playerConfig = {
   id: 'hero-ranger',
@@ -133,9 +141,48 @@ export function startCocosRuntimePreview(): void {
     const canvas = ensureCanvasRoot(scene);
     const graphicsNode = ensureRenderNode(canvas, 'HeroBattleBeastsRuntimeGraphics');
     const graphics = graphicsNode.getComponent(Graphics) ?? graphicsNode.addComponent(Graphics);
+
     const hudNode = ensureNode(canvas, 'HeroBattleBeastsRuntimeHud');
     const statusLabel = ensureLabel(hudNode, 'StatusLabel', 24, -626, 310);
     const helpLabel = ensureLabel(hudNode, 'HelpLabel', 18, -626, -320);
+
+    // AI生成的玩家精灵节点（放在HUD之后创建，保证渲染在最上层）
+    const playerSpriteNode = ensureNode(canvas, 'PlayerSprite');
+    sPlayerSpriteNode = playerSpriteNode;
+    playerSpriteNode.setPosition(0, 0);
+    const playerTransform = playerSpriteNode.getComponent(UITransform) ?? playerSpriteNode.addComponent(UITransform);
+    // 角色视觉尺寸：宽56高80（物理碰撞盒32x48，视觉略大于碰撞盒）
+    playerTransform.setContentSize(56, 80);
+    const playerSprite = playerSpriteNode.getComponent(Sprite) ?? playerSpriteNode.addComponent(Sprite);
+    // CUSTOM 模式：用 UITransform 控制显示尺寸，而非纹理原始尺寸
+    playerSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+
+    // 加载AI图片（直接加载ImageAsset后手动构建SpriteFrame，绕过.meta子资源问题）
+    try {
+      console.log('[HeroBattleBeasts] Loading player image from: art/characters/player_hero');
+      resources.load('art/characters/player_hero', ImageAsset, (err: Error | null, imageAsset: ImageAsset) => {
+        if (err) {
+          console.warn('[HeroBattleBeasts] Failed to load player image:', err.message || err);
+          return;
+        }
+        if (!imageAsset) {
+          console.warn('[HeroBattleBeasts] Loaded ImageAsset is null');
+          return;
+        }
+        try {
+          const texture = new Texture2D();
+          texture.image = imageAsset;
+          const spriteFrame = new SpriteFrame();
+          spriteFrame.texture = texture;
+          playerSprite.spriteFrame = spriteFrame;
+          console.info('[HeroBattleBeasts] AI player sprite created, texture size:', texture.width, 'x', texture.height);
+        } catch (e2) {
+          console.warn('[HeroBattleBeasts] SpriteFrame creation failed:', e2);
+        }
+      });
+    } catch (e) {
+      console.warn('[HeroBattleBeasts] resources.load exception:', e);
+    }
 
     const runtime = new GameRuntime({
       levelConfig,
@@ -255,7 +302,7 @@ function renderGame(graphics: Graphics, viewModel: RuntimeViewModel): void {
   drawPickups(graphics, cameraX, viewModel);
   drawEnemies(graphics, cameraX, viewModel);
   drawBullets(graphics, cameraX, viewModel);
-  drawPlayer(graphics, cameraX, viewModel);
+  updatePlayerSprite(graphics, cameraX, viewModel);
   drawResultOverlay(graphics, viewModel);
 }
 
@@ -351,9 +398,22 @@ function drawBullets(graphics: Graphics, cameraX: number, viewModel: RuntimeView
   }
 }
 
-function drawPlayer(graphics: Graphics, cameraX: number, viewModel: RuntimeViewModel): void {
+function updatePlayerSprite(graphics: Graphics, cameraX: number, viewModel: RuntimeViewModel): void {
   const x = worldToScreenX(viewModel.player.position.x, cameraX);
   const y = worldToScreenY(viewModel.player.position.y);
+
+  // 检查精灵节点及其 Sprite 组件是否已加载精灵帧
+  if (sPlayerSpriteNode) {
+    const sprite = sPlayerSpriteNode.getComponent(Sprite);
+    if (sprite && sprite.spriteFrame) {
+      // 精灵已加载，用节点位置渲染
+      sPlayerSpriteNode.setPosition(x, y);
+      sPlayerSpriteNode.setScale(viewModel.player.facing, 1, 1);
+      return;
+    }
+  }
+
+  // 精灵未加载时，用 Graphics 画色块作为后备
   graphics.fillColor = new Color(244, 94, 89, 255);
   graphics.roundRect(x - 18, y - 48, 36, 48, 12);
   graphics.fill();

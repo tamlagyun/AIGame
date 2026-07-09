@@ -1,0 +1,43 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "a686ca97-e91f-4a95-9654-dd1e87e127a7",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "a686ca97-e91f-4a95-9654-dd1e87e127a7@6c48a",
+      "displayName": "player_hero",
+      "id": "6c48a",
+      "name": "texture",
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {},
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "premultiplyAlpha": false,
+        "anisotropy": 0,
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "a686ca97-e91f-4a95-9654-dd1e87e127a7",
+        "visible": false
+      }
+    }
+  },
+  "userData": {
+    "type": "texture",
+    "redirect": "a686ca97-e91f-4a95-9654-dd1e87e127a7@6c48a",
+    "hasAlpha": true,
+    "fixAlphaTransparencyArtifacts": false
+  }
+}
