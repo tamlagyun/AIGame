@@ -1,0 +1,19 @@
+{
+  "name": "fish-eat-fish",
+  "displayName": "鲫鱼吃鲤鱼",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "creator": {
+    "version": "3.8.8"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check-project.mjs",
+    "hygiene": "node scripts/check-hygiene.mjs",
+    "build:target": "node scripts/build-target.mjs"
+  },
+  "devDependencies": {},
+  "uuid": "bbdb57ca-6992-4b89-b966-527a637c7afb"
+}
+

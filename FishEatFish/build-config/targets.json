@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "web-desktop": { "platform": "web-desktop", "host": "any", "sdkRequired": false },
+    "wechatgame": { "platform": "wechatgame", "host": "any", "sdkRequired": true, "requiredEnvironment": ["WECHAT_APP_ID"] },
+    "bytedance-mini-game": { "platform": "bytedance-mini-game", "host": "any", "sdkRequired": true, "requiredEnvironment": ["DOUYIN_APP_ID"] },
+    "android": { "platform": "android", "host": "any", "sdkRequired": true, "requiredEnvironment": ["ANDROID_HOME"] },
+    "ios": { "platform": "ios", "host": "darwin", "sdkRequired": true, "requiredEnvironment": ["IOS_BUNDLE_ID"] },
+    "harmonyos-next": { "platform": "harmonyos-next", "host": "any", "sdkRequired": true, "requiredEnvironment": ["HARMONY_BUNDLE_NAME"] }
+  }
+}
+

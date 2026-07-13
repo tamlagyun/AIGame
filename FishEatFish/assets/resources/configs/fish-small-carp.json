@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "fish-small-carp",
+  "displayName": "小鲤鱼",
+  "maxHealth": 60,
+  "moveSpeed": 190,
+  "experienceReward": 20,
+  "collider": { "kind": "capsule", "radius": 22, "length": 44 },
+  "basicAttackId": "skill-basic-bite",
+  "initialSkillId": "skill-dash-bite"
+}
+

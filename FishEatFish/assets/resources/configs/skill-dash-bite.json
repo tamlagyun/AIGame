@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "skill-dash-bite",
+  "displayName": "冲刺撕咬",
+  "animationState": "dashBite",
+  "damage": 30,
+  "range": 96,
+  "cooldownSeconds": 5,
+  "dashDistance": 240
+}
+

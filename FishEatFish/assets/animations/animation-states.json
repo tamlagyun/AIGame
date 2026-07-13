@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "states": ["idle", "swim", "bite", "dashBite", "hurt", "death"],
+  "horizontalFacingPolicy": "flip-x-by-default"
+}
+

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "fish-player-crucian",
+  "displayName": "小鲫鱼",
+  "maxHealth": 100,
+  "moveSpeed": 260,
+  "experienceReward": 10,
+  "collider": { "kind": "capsule", "radius": 24, "length": 48 },
+  "basicAttackId": "skill-basic-bite",
+  "initialSkillId": "skill-dash-bite"
+}
+
