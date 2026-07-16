@@ -57,3 +57,10 @@
 | 0.2.22 | 2026-07-16 | 为四个共享冷却的技能按钮增加半透明径向蒙板，从 12 点方向开始顺时针一圈逐渐消失，技能名称保持在蒙板上层 | GameBootstrap、UI 布局规则、冷却蒙板回归测试 | 已实施，待 IDE/Web 双端视觉验收 |
 | 0.2.23 | 2026-07-16 | 将第二技能改为“鲸吞”：服务器选择 800 范围内最近有效玩家并权威瞬移；施法者放大 3 倍、双方 50% 透明并持续 3 秒，施法者同步播放攻击动作；技能使用独立 8 秒冷却，不造成额外伤害 | CombatService、Room、实时协议、GameBootstrap、技能配置与测试 | 已实施，待 IDE/Web 双端联机视觉验收 |
 | 0.2.24 | 2026-07-16 | 将用户指定暂用的 `ART-PROMPT-UI-0007 v1` 鲸吞图标处理为透明 PNG 并接入右下第二圆弧技能槽；仅替换按钮图片来源，不改动现有布局、触摸区、标签或冷却蒙板。该图含牙齿，与 v1 排除项冲突，已保留待确认 v2 作为后续替换方案且未调用 | 美术提示词与资源登记、GameBootstrap、资源回归检查 | 已接入，待用户在 Cocos IDE 与 Web 浏览器视觉验收 |
+| 0.2.25 | 2026-07-16 | 将玩家技能栏重构为配置驱动：新增技能栏配置、两个占位技能配置、技能目录、通用 `SkillActionPanel` 和 `SkillEffectExecutor`；技能槽位、图标、冷却组、特效参数和鲸吞视觉参数不再硬编码在 `GameBootstrap.ts` | 技能 JSON、配置校验、GameBootstrap、通用 UI 组件、回归测试与技能架构文档 | 已实施，待 IDE/Web 双端视觉与交互验收 |
+| 0.2.26 | 2026-07-16 | 将鱼儿头顶用户名与生命显示拆分为独立 `FishNameOverlay`、`FishHealthBarOverlay` 类；生命条、血量数字和用户名继续通过同一世界坐标到 HUD 坐标投影跟随鱼儿，GameBootstrap 仅管理实例生命周期与更新分发 | 头顶 HUD Overlay、GameBootstrap、UI 布局规则与回归测试 | 已实施，待 IDE/Web 双端视觉验收 |
+| 0.2.27 | 2026-07-16 | 将测试环境登录框重构为参数化 `LoginDialog` 组件；调用方通过 variant、文案、输入限制、初始值和提交回调区分不同登录入口，IDE 与 Web 复用同一组参数和校验逻辑 | LoginDialog、GameBootstrap、UI 布局规则与回归测试 | 已实施，待 IDE/Web 双端视觉与输入验收 |
+| 0.2.28 | 2026-07-16 | 新增 `RoleManager`，统一创建、查询和移除本地及远端玩家鱼儿 Cocos 对象；GameBootstrap 与 RemotePlayerRegistry 保留网络、动画和战斗协调，不再直接创建或销毁角色 Node | RoleManager、GameBootstrap、远端玩家注册表、结构回归测试 | 已实施，待 IDE/Web 多人联机回归验收 |
+| 0.2.29 | 2026-07-16 | 修复 UI 运行阻塞：恢复 `GameBootstrap` 对实际使用的 `Widget` 导入，并将血条和技能标签描边从已弃用的 `LabelOutline` 组件迁移到 `Label.outlineColor/outlineWidth` | UI 组件、登录弹窗、血条与技能标签、UI 布局规则 | 已实施，待 IDE/Web 控制台与视觉验收 |
+| 0.2.30 | 2026-07-16 | 建立 `Player` 与 `LocalPlayer extends Player` 层级：所有玩家共享位置、朝向、生命、死亡及视觉状态，本地主角额外封装预测移动与转向；RoleManager 改为管理玩家对象而不是裸节点 | Player、LocalPlayer、RoleManager、GameBootstrap、结构回归测试 | 已实施，待 IDE/Web 多人联机验收 |
+| 0.2.31 | 2026-07-16 | 将大世界启动时的固定 HUD 节点创建抽离至 `MainUIManager`：统一创建和暴露 `InputLayer`、头顶信息承载层、提示/生命标签、完整摇杆根节点和配置驱动技能面板；`GameBootstrap` 只协调资源、输入、网络与玩法状态 | MainUIManager、GameBootstrap、UI 结构回归测试 | 已实施，待 IDE/Web 双端视觉与触摸验收 |

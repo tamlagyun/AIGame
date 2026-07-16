@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "id": "player-default-skill-loadout",
+  "layout": {
+    "rootName": "ActionControlsRoot",
+    "width": 450,
+    "height": 340,
+    "right": 24,
+    "bottom": 20,
+    "primaryCenter": { "x": 350, "y": 104 },
+    "primaryButtonSize": 132,
+    "arcRadius": 176,
+    "arcAngles": [190, 155, 120, 85],
+    "arcButtonSize": 104,
+    "cooldownStart": 0.25
+  },
+  "skillConfigPaths": [
+    "configs/skill-basic-bite",
+    "configs/skill-dash-bite",
+    "configs/skill-whale-swallow",
+    "configs/skill-placeholder-3",
+    "configs/skill-placeholder-4"
+  ]
+}

@@ -2,9 +2,25 @@
   "schemaVersion": 2,
   "id": "skill-basic-bite",
   "displayName": "普通撕咬",
+  "networkSkillId": "skill-basic-bite",
   "animationState": "bite",
   "damage": 15,
   "range": 72,
   "cooldownSeconds": 0.55,
-  "dashDistance": 0
+  "dashDistance": 0,
+  "ui": {
+    "nodeName": "BasicAttackButton",
+    "slot": "primary",
+    "iconPath": "art/ui/basic-attack",
+    "cooldownGroup": "basic"
+  },
+  "clientEffect": {
+    "kind": "bite",
+    "animationDurationSeconds": 0.34,
+    "visualOffset": 76,
+    "visualRadius": 72,
+    "visualDurationSeconds": 0.16,
+    "visualColor": { "r": 255, "g": 236, "b": 120, "a": 235 },
+    "hint": "普通撕咬：攻击范围 72"
+  }
 }

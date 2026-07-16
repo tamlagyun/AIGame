@@ -24,11 +24,15 @@
 - 技能冷却期间，每个技能图标内部覆盖使用同一正式技能位图染色得到的半透明深色径向蒙板；蒙板从图标正上方 12 点方向开始，按顺时针方向转一圈逐渐消失。
 - 冲刺、临时技能 3、临时技能 4 共享现有 5 秒冲刺技能冷却；鲸吞使用独立 8 秒冷却。每个按钮的蒙板读取自己所属冷却组，禁止再次退回单一全局冷却值。
 - 新增技能时必须复用 `ActionControlsRoot` 的圆弧槽位，不得新增独立 Widget 或写屏幕绝对坐标；普攻始终是扇形布局圆心。
+- 技能区必须由通用 `SkillActionPanel` 按 `skill-loadout-player.json` 与各 `skill-*.json` 创建；`GameBootstrap` 只传入 `InputLayer`、已加载资源和激活回调，禁止在其中重新创建某个具体技能按钮或重写槽位坐标。
 - 临时占位技能在正式技能配置接入前允许复用已登记的冲刺技能位图，但必须明确记录为占位复用，不得复制 PNG 生成重复资源。
 - 控件全部挂在 `SafeAreaRoot/InputLayer`，不随海底世界缩放；刘海屏、平板和折叠屏通过安全区适配。
 - 正式美术资源使用 PNG，禁止用 SVG 或 Graphics 拼凑替代；每个正式资源均须登记提示词版本、加工步骤和 `.meta`。
 
 ## 登录弹窗基线
+
+- 登录弹窗必须通过参数化 `LoginDialog` 组件创建；`GameBootstrap` 只传入登录入口参数与提交回调，禁止再分别维护 IDE、Web 或其他登录弹窗的重复节点树、文案和尺寸常量。
+- Cocos 3.8.8 的文字描边必须直接设置 `Label.outlineColor` 与 `Label.outlineWidth`，禁止继续添加已弃用的 `LabelOutline` 组件；UI 脚本移除或新增依赖后必须复查 `cc` 导入与实际引用一致，避免运行时出现 `Widget is not defined`。
 
 - 登录弹窗属于固定屏幕模态 UI，必须与摇杆、技能 UI 使用一致的屏幕空间语义；显示期间暂停玩家移动与相机跟随。
 - IDE 与浏览器共享面板尺寸、输入框尺寸、校验和提交逻辑；平台差异仅限输入适配层。
@@ -38,6 +42,8 @@
 - IDE 登录弹窗的 Cocos 视觉节点必须保留在 `HudRoot/SafeAreaRoot/InputLayer`；原生单行 input 的 DOM 校准只修正聚焦后的输入元素，不得通过把整套弹窗移到 Canvas 根节点来规避坐标问题。
 
 ## 坐标系统基线
+
+- 鱼儿头顶 UI 按职责拆分：`FishHealthBarOverlay` 只管理生命条贴图、裁剪、生命数字和 120 px 跟随偏移；`FishNameOverlay` 只管理用户名和 160 px 跟随偏移。两者均挂在 `FishHealthOverlay`，`GameBootstrap` 只能管理生命周期及调用统一投影更新。
 
 - `Canvas` 由 Cocos 按 1280×720 设计分辨率对齐屏幕，使用中心锚点；`WorldRoot` 与 `HudRoot` 作为 Canvas 直接子节点时局部位置均为 `(0,0)`。
 - `MainCamera` 与 `WorldRoot` 内的游戏对象使用同一局部世界坐标；相机移动到 `(x,y)` 后，`HudRoot` 同步到 `(x,y)`，从而在游戏相机中保持固定屏幕位置。
@@ -62,3 +68,8 @@
 - 冷却蒙板必须是对应技能按钮的子节点、与按钮同尺寸和中心锚点，创建顺序位于图标之后、文字之前；不得创建屏幕级蒙板或独立触摸区域。
 - Cocos 径向填充使用 `fillStart = 0.25` 表示 12 点方向，负 `fillRange` 表示顺时针；为实现“从 12 点顺时针消失”，必须同时移动起点并缩短负填充范围，禁止只修改 `fillRange` 导致从错误边缘消退。
 - 调整技能区域时只能修改容器尺寸、圆心、半径或槽位角度，不得移动 `HudRoot`、`SafeAreaRoot`、`InputLayer` 或相机补偿逻辑。
+
+## 大世界主 UI 管理边界
+
+- 大世界启动时创建固定 HUD 节点的入口统一为 `MainUIManager`。它负责取得并稳定化 `HudRoot/SafeAreaRoot/InputLayer`，并创建头顶信息承载层、提示与生命标签、完整摇杆根节点及 `SkillActionPanel`。
+- `GameBootstrap` 只能将资源、输入回调、技能激活回调和 UI 状态更新传给 `MainUIManager`，不得再次创建同名固定 HUD 节点或维护第二套坐标/Widget 逻辑。

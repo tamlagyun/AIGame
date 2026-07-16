@@ -2,6 +2,7 @@
   "schemaVersion": 2,
   "id": "skill-whale-swallow",
   "displayName": "鲸吞",
+  "networkSkillId": "skill-whale-swallow",
   "animationState": "whaleSwallow",
   "damage": 0,
   "range": 800,
@@ -9,5 +10,21 @@
   "dashDistance": 0,
   "effectDurationSeconds": 3,
   "scaleMultiplier": 3,
-  "opacity": 0.5
+  "opacity": 0.5,
+  "ui": {
+    "nodeName": "SkillWhaleSwallowButton",
+    "slot": "arc",
+    "slotIndex": 1,
+    "iconPath": "art/ui/skill-whale-swallow",
+    "cooldownGroup": "whale"
+  },
+  "clientEffect": {
+    "kind": "whaleSwallow",
+    "animationDurationSeconds": 0.42,
+    "visualOffset": 76,
+    "visualRadius": 96,
+    "visualDurationSeconds": 0.42,
+    "visualColor": { "r": 120, "g": 230, "b": 255, "a": 235 },
+    "hint": "鲸吞：正在搜索 800 范围内最近目标"
+  }
 }

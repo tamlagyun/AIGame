@@ -29,14 +29,50 @@ export interface SkillConfig {
   schemaVersion: 2;
   id: string;
   displayName: string;
+  networkSkillId: string;
   animationState: 'bite' | 'dashBite' | 'whaleSwallow';
   damage: number;
   range: number;
   cooldownSeconds: number;
   dashDistance: number;
+  ui: {
+    nodeName: string;
+    slot: 'primary' | 'arc';
+    slotIndex?: number;
+    iconPath: string;
+    cooldownGroup: string;
+  };
+  clientEffect: {
+    kind: 'bite' | 'dashBite' | 'whaleSwallow';
+    animationDurationSeconds: number;
+    visualOffset: number;
+    visualRadius: number;
+    visualDurationSeconds: number;
+    visualColor: { r: number; g: number; b: number; a: number };
+    hint: string;
+  };
   effectDurationSeconds?: number;
   scaleMultiplier?: number;
   opacity?: number;
+}
+
+export interface SkillLoadoutConfig {
+  schemaVersion: 2;
+  id: string;
+  layout: {
+    rootName: string;
+    width: number;
+    height: number;
+    right: number;
+    bottom: number;
+    primaryCenter: Vec2Value;
+    primaryButtonSize: number;
+    arcRadius: number;
+    arcAngles: number[];
+    arcButtonSize: number;
+    cooldownStart: number;
+  };
+  skillConfigPaths: string[];
 }
 
 export interface WorldConfig {

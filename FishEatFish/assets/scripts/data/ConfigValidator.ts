@@ -1,4 +1,4 @@
-import { CONFIG_SCHEMA_VERSION, type FishConfig, type SkillConfig, type WorldConfig } from '../core/types.ts';
+import { CONFIG_SCHEMA_VERSION, type FishConfig, type SkillConfig, type SkillLoadoutConfig, type WorldConfig } from '../core/types.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -51,12 +51,48 @@ export const parseSkillConfig = (value: unknown): SkillConfig => {
   requirePositive(config.range, 'range');
   requireNonNegative(config.cooldownSeconds, 'cooldownSeconds');
   requireNonNegative(config.dashDistance, 'dashDistance');
+  if (typeof config.networkSkillId !== 'string' || config.networkSkillId.length === 0) throw new Error('networkSkillId is required');
+  if (!isRecord(config.ui)) throw new Error('ui must be an object');
+  if (typeof config.ui.nodeName !== 'string' || config.ui.nodeName.length === 0) throw new Error('ui.nodeName is required');
+  if (config.ui.slot !== 'primary' && config.ui.slot !== 'arc') throw new Error('ui.slot must be primary or arc');
+  if (config.ui.slot === 'primary' && config.ui.slotIndex !== undefined) throw new Error('ui.slotIndex is only valid for arc');
+  if (config.ui.slot === 'arc' && (!Number.isInteger(config.ui.slotIndex) || (config.ui.slotIndex as number) < 0)) throw new Error('ui.slotIndex must be a non-negative integer');
+  if (typeof config.ui.iconPath !== 'string' || config.ui.iconPath.length === 0) throw new Error('ui.iconPath is required');
+  if (typeof config.ui.cooldownGroup !== 'string' || config.ui.cooldownGroup.length === 0) throw new Error('ui.cooldownGroup is required');
+  if (!isRecord(config.clientEffect)) throw new Error('clientEffect must be an object');
+  if (config.clientEffect.kind !== 'bite' && config.clientEffect.kind !== 'dashBite' && config.clientEffect.kind !== 'whaleSwallow') throw new Error('clientEffect.kind is invalid');
+  requirePositive(config.clientEffect.animationDurationSeconds, 'clientEffect.animationDurationSeconds');
+  requireNonNegative(config.clientEffect.visualOffset, 'clientEffect.visualOffset');
+  requirePositive(config.clientEffect.visualRadius, 'clientEffect.visualRadius');
+  requirePositive(config.clientEffect.visualDurationSeconds, 'clientEffect.visualDurationSeconds');
+  if (typeof config.clientEffect.hint !== 'string') throw new Error('clientEffect.hint must be a string');
+  if (!isRecord(config.clientEffect.visualColor)) throw new Error('clientEffect.visualColor must be an object');
+  for (const color of ['r', 'g', 'b', 'a']) {
+    const value = config.clientEffect.visualColor[color];
+    if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 255) throw new Error(`clientEffect.visualColor.${color} must be an integer between 0 and 255`);
+  }
   if (config.effectDurationSeconds !== undefined) requirePositive(config.effectDurationSeconds, 'effectDurationSeconds');
   if (config.scaleMultiplier !== undefined) requirePositive(config.scaleMultiplier, 'scaleMultiplier');
   if (config.opacity !== undefined && (typeof config.opacity !== 'number' || !Number.isFinite(config.opacity) || config.opacity < 0 || config.opacity > 1)) {
     throw new Error('opacity must be between zero and one');
   }
   return config as unknown as SkillConfig;
+};
+
+export const parseSkillLoadoutConfig = (value: unknown): SkillLoadoutConfig => {
+  const config = requireBase(value, 'skill loadout');
+  if (!isRecord(config.layout)) throw new Error('layout must be an object');
+  const layout = config.layout;
+  for (const key of ['width', 'height', 'right', 'bottom', 'primaryButtonSize', 'arcRadius']) requireNonNegative(layout[key], `layout.${key}`);
+  if (typeof layout.rootName !== 'string' || layout.rootName.length === 0) throw new Error('layout.rootName is required');
+  if (!isRecord(layout.primaryCenter)) throw new Error('layout.primaryCenter must be an object');
+  requireNonNegative(layout.primaryCenter.x, 'layout.primaryCenter.x');
+  requireNonNegative(layout.primaryCenter.y, 'layout.primaryCenter.y');
+  if (!Array.isArray(layout.arcAngles) || layout.arcAngles.length === 0 || layout.arcAngles.some((angle) => typeof angle !== 'number' || !Number.isFinite(angle))) throw new Error('layout.arcAngles must be a non-empty number array');
+  if (typeof layout.cooldownStart !== 'number' || !Number.isFinite(layout.cooldownStart) || layout.cooldownStart < 0 || layout.cooldownStart > 1) throw new Error('layout.cooldownStart must be between zero and one');
+  if (!Array.isArray(config.skillConfigPaths) || config.skillConfigPaths.length === 0 || config.skillConfigPaths.some((path) => typeof path !== 'string' || path.length === 0)) throw new Error('skillConfigPaths must be a non-empty string array');
+  if (new Set(config.skillConfigPaths).size !== config.skillConfigPaths.length) throw new Error('skillConfigPaths must not contain duplicates');
+  return config as unknown as SkillLoadoutConfig;
 };
 
 export const parseWorldConfig = (value: unknown): WorldConfig => {

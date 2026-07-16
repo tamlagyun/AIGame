@@ -14,6 +14,16 @@ const required = [
   'assets/scripts/core/types.ts',
   'assets/scripts/core/save.ts',
   'assets/scripts/data/ConfigValidator.ts',
+  'assets/scripts/data/SkillCatalog.ts',
+  'assets/scripts/cocos/SkillActionPanel.ts',
+  'assets/scripts/cocos/SkillEffectExecutor.ts',
+  'assets/scripts/cocos/FishHealthBarOverlay.ts',
+  'assets/scripts/cocos/FishNameOverlay.ts',
+  'assets/scripts/cocos/LoginDialog.ts',
+  'assets/scripts/cocos/RoleManager.ts',
+  'assets/scripts/cocos/Player.ts',
+  'assets/scripts/cocos/LocalPlayer.ts',
+  'assets/scripts/cocos/MainUIManager.ts',
   'assets/scripts/platform/PlatformService.ts',
   'assets/scripts/platform/PlatformServiceEditor.ts',
   'assets/resources/configs/fish-player.json',
@@ -21,6 +31,9 @@ const required = [
   'assets/resources/configs/skill-basic-bite.json',
   'assets/resources/configs/skill-dash-bite.json',
   'assets/resources/configs/skill-whale-swallow.json',
+  'assets/resources/configs/skill-placeholder-3.json',
+  'assets/resources/configs/skill-placeholder-4.json',
+  'assets/resources/configs/skill-loadout-player.json',
   'assets/resources/configs/world-sea-001.json',
   'assets/resources/art/map/sea-background.png',
   'assets/resources/art/ui/skill-whale-swallow.png',
@@ -46,6 +59,7 @@ const required = [
   ,'docs/realtime-protocol.md'
   ,'docs/auth-and-platform-adapters.md'
   ,'docs/deployment.md'
+  ,'docs/skill-configuration.md'
 ];
 
 const missing = required.filter((path) => !existsSync(fromRoot(path)));

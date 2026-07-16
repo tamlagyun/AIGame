@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "id": "skill-dash-bite",
-  "displayName": "冲刺撕咬",
+  "id": "skill-placeholder-3",
+  "displayName": "技能3",
   "networkSkillId": "skill-dash-bite",
   "animationState": "dashBite",
   "damage": 30,
@@ -9,9 +9,9 @@
   "cooldownSeconds": 5,
   "dashDistance": 240,
   "ui": {
-    "nodeName": "SkillDashButton",
+    "nodeName": "SkillPlaceholderButton3",
     "slot": "arc",
-    "slotIndex": 0,
+    "slotIndex": 2,
     "iconPath": "art/ui/skill-dash",
     "cooldownGroup": "dash"
   },
@@ -22,6 +22,6 @@
     "visualRadius": 96,
     "visualDurationSeconds": 0.22,
     "visualColor": { "r": 120, "g": 230, "b": 255, "a": 235 },
-    "hint": "冲刺撕咬：突进 240，冷却 5 秒"
+    "hint": "技能3：暂用冲刺撕咬效果"
   }
 }
