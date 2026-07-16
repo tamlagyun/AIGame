@@ -1,4 +1,4 @@
-import type { Vec2Value } from './types.ts';
+import type { ArtFacingDirection, Vec2Value } from './types.ts';
 
 export interface MovementBounds {
   minX: number;
@@ -13,11 +13,34 @@ export const normalizeMovement = (value: Vec2Value): Vec2Value => {
   return { x: value.x / length, y: value.y / length };
 };
 
-/** Returns the world-facing angle for a right-facing fish sprite. */
-export const movementAngleDegrees = (value: Vec2Value): number | null => {
-  if (Math.hypot(value.x, value.y) <= 0.01) return null;
-  return Math.atan2(value.y, value.x) * 180 / Math.PI;
+export type HorizontalFacingAngle = 0 | 180;
+
+/** Keeps the previous facing for vertical/idle input and only changes it on horizontal movement. */
+export const horizontalFacingAngleDegrees = (value: Vec2Value, current: HorizontalFacingAngle): HorizontalFacingAngle => {
+  if (value.x > 0.01) return 0;
+  if (value.x < -0.01) return 180;
+  return current;
 };
+
+/** Normalizes any network angle to the nearest horizontal facing. */
+export const normalizeHorizontalFacingAngle = (angle: number): HorizontalFacingAngle =>
+  Math.cos(angle * Math.PI / 180) >= 0 ? 0 : 180;
+
+/** Converts logical left/right into X scale after every frame has been normalized to one configured art direction. */
+export const horizontalScaleForFacing = (
+  angle: HorizontalFacingAngle,
+  artFacingDirection: ArtFacingDirection,
+  scale = 1
+): number => {
+  const logicalDirection: ArtFacingDirection = angle === 0 ? 'right' : 'left';
+  return logicalDirection === artFacingDirection ? scale : -scale;
+};
+
+/** Normalizes generated animation frames to the fish's configured default art direction. */
+export const shouldFlipArtFrame = (
+  sourceFacingDirection: ArtFacingDirection,
+  artFacingDirection: ArtFacingDirection
+): boolean => sourceFacingDirection !== artFacingDirection;
 
 export const moveWithinBounds = (
   position: Vec2Value,

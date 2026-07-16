@@ -20,3 +20,5 @@ python Tools/image-processing/process_generated_art.py `
 ```
 
 地图与精灵图参数可以单独使用。精灵图按行优先输出；默认文件名为 `frame-0.png` 到 `frame-N.png`，可用 `--frame-prefix` 修改。
+
+默认只保留最大连通主体，适合单一角色。攻击动作等包含分离的水花、甩动线或能量效果时，增加 `--keep-all-foreground` 以保留全部非绿幕前景。

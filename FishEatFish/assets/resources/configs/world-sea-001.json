@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "world-sea-001",
   "width": 8000,
   "height": 4500,
@@ -8,4 +8,3 @@
   "maxActiveFish": 30,
   "maxFullUpdateFish": 16
 }
-

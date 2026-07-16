@@ -36,6 +36,7 @@ test('two websocket players receive authoritative combat damage', async () => {
   await new Promise((resolve) => setTimeout(resolve, 20));
   a.socket.send(JSON.stringify({ protocolVersion: 1, type: 'skill', payload: { skillId: 'skill-basic-bite', clientTick: 1, x: 0, y: 0, rotation: 0 } }));
   await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.equal(b.messages.some((message) => message.type === 'skillEffect' && message.payload.actionSequence === 1), true);
   assert.equal(b.messages.some((message) => message.type === 'hitConfirmed'), true);
   assert.equal(b.messages.some((message) => message.type === 'playerDamaged' && message.payload.damage === 15), true);
   a.socket.close(); b.socket.close(); await app.close();

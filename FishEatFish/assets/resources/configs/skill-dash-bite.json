@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "skill-dash-bite",
   "displayName": "冲刺撕咬",
   "animationState": "dashBite",
@@ -8,4 +8,3 @@
   "cooldownSeconds": 5,
   "dashDistance": 240
 }
-

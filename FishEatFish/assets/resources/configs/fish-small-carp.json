@@ -1,7 +1,13 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "fish-small-carp",
   "displayName": "小鲤鱼",
+  "artFacingDirection": "right",
+  "animationArtFacingDirections": {
+    "swim": "right",
+    "bite": "right",
+    "hurt": "right"
+  },
   "maxHealth": 60,
   "moveSpeed": 190,
   "experienceReward": 20,
@@ -9,4 +15,3 @@
   "basicAttackId": "skill-basic-bite",
   "initialSkillId": "skill-dash-bite"
 }
-

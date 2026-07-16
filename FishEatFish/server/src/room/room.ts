@@ -19,13 +19,20 @@ export class Room {
   get size() { return this.players.size; }
   add(accountId: string, displayName: string, socket: WebSocket) {
     if (this.size >= this.config.roomCapacity) throw new Error('ROOM_FULL');
-    const player: PlayerSession = { playerId: randomUUID(), accountId, displayName, socket, x: 0, y: 0, rotation: 0, lastInput: { clientTick: 0, moveX: 0, moveY: 0, rotation: 0 }, combat: createCombatState() };
+    const player: PlayerSession = { playerId: randomUUID(), accountId, displayName, socket, x: 0, y: 0, rotation: 0, lastInput: { clientTick: 0, moveX: 0, moveY: 0, rotation: 0 }, combat: createCombatState(), actionSequence: 0, actionUntil: 0 };
     this.players.set(player.playerId, player);
     this.broadcast(message('playerJoined', this.playerSnapshot(player)));
     return player;
   }
   remove(playerId: string) { this.players.delete(playerId); this.broadcast(message('playerRemoved', { playerId })); }
-  input(playerId: string, input: InputPayload) { const player = this.players.get(playerId); if (!player) throw new Error('PLAYER_NOT_IN_ROOM'); player.lastInput = input; }
+  input(playerId: string, input: InputPayload) {
+    const player = this.players.get(playerId);
+    if (!player) throw new Error('PLAYER_NOT_IN_ROOM');
+    const rotation = Math.cos(input.rotation * Math.PI / 180) >= 0 ? 0 : 180;
+    player.lastInput = { ...input, rotation };
+    // 输入与技能消息按 WebSocket 顺序到达；立即更新左右朝向，保证快速转向后攻击方向正确。
+    player.rotation = rotation;
+  }
   skill(playerId: string, skill: SkillPayload) {
     const source = this.players.get(playerId);
     if (!source) throw new Error('PLAYER_NOT_IN_ROOM');
@@ -40,7 +47,12 @@ export class Room {
       source.x = next.x;
       source.y = next.y;
     });
-    if (result.accepted) this.broadcast(message('skillEffect', { playerId, skillId: skill.skillId, clientTick: skill.clientTick, x: source.x, y: source.y, rotation: source.rotation, serverTick: this.tickCount }));
+    if (result.accepted) {
+      source.actionSequence += 1;
+      source.activeAction = skill.skillId;
+      source.actionUntil = Date.now() + (skill.skillId === 'skill-dash-bite' ? 420 : 340);
+      this.broadcast(message('skillEffect', { playerId, skillId: skill.skillId, actionSequence: source.actionSequence, clientTick: skill.clientTick, x: source.x, y: source.y, rotation: source.rotation, serverTick: this.tickCount }));
+    }
     this.sendTo(source, message('skillResolved', { playerId, skillId: skill.skillId, hitCount: result.hitCount, reason: result.reason, serverTick: this.tickCount }));
     for (const event of result.events) this.broadcast(message(event.type, event.payload));
   }
@@ -60,7 +72,10 @@ export class Room {
     }
   }
   snapshot(selfPlayerId?: string): RoomSnapshot { return { roomId: this.id, mapId: this.config.mapId, serverTick: this.tickCount, ...(selfPlayerId ? { selfPlayerId } : {}), players: [...this.players.values()].map((player) => this.playerSnapshot(player)) }; }
-  private playerSnapshot(player: PlayerSession): PlayerSnapshot { return { playerId: player.playerId, displayName: player.displayName, x: player.x, y: player.y, rotation: player.rotation, lastProcessedClientTick: player.lastInput.clientTick, health: player.combat.health, maxHealth: player.combat.maxHealth, level: player.combat.level, dead: player.combat.dead }; }
+  private playerSnapshot(player: PlayerSession): PlayerSnapshot {
+    const actionActive = !player.combat.dead && player.activeAction !== undefined && player.actionUntil > Date.now();
+    return { playerId: player.playerId, displayName: player.displayName, x: player.x, y: player.y, rotation: player.rotation, lastProcessedClientTick: player.lastInput.clientTick, health: player.combat.health, maxHealth: player.combat.maxHealth, level: player.combat.level, dead: player.combat.dead, ...(actionActive ? { action: player.activeAction, actionSequence: player.actionSequence } : {}) };
+  }
   private sendTo(player: PlayerSession, value: unknown) { if (player.socket.readyState === 1) player.socket.send(encode(value as never)); }
   private broadcast(value: unknown) { const encoded = encode(value as never); for (const player of this.players.values()) if (player.socket.readyState === 1) player.socket.send(encoded); }
 }

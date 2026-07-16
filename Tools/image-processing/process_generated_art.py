@@ -38,7 +38,7 @@ def largest_component(mask: Image.Image) -> Image.Image:
     return Image.frombytes("L", (width, height), bytes(result))
 
 
-def remove_green_background(image: Image.Image, threshold: int) -> Image.Image:
+def remove_green_background(image: Image.Image, threshold: int, keep_all_foreground: bool) -> Image.Image:
     rgba = image.convert("RGBA")
     values = []
     for red, green, blue, _alpha in rgba.getdata():
@@ -46,7 +46,9 @@ def remove_green_background(image: Image.Image, threshold: int) -> Image.Image:
         values.append(0 if is_green else 255)
     mask = Image.new("L", rgba.size)
     mask.putdata(values)
-    mask = largest_component(mask).filter(ImageFilter.GaussianBlur(0.65))
+    if not keep_all_foreground:
+        mask = largest_component(mask)
+    mask = mask.filter(ImageFilter.GaussianBlur(0.65))
     pixels = []
     for (red, green, blue, _alpha), alpha in zip(rgba.getdata(), mask.getdata()):
         if alpha:
@@ -56,7 +58,7 @@ def remove_green_background(image: Image.Image, threshold: int) -> Image.Image:
     return rgba
 
 
-def process_sheet(source: Path, output_dir: Path, columns: int, rows: int, frame_size: int, green_threshold: int, frame_prefix: str) -> list[Path]:
+def process_sheet(source: Path, output_dir: Path, columns: int, rows: int, frame_size: int, green_threshold: int, frame_prefix: str, keep_all_foreground: bool) -> list[Path]:
     sheet = Image.open(source).convert("RGBA")
     if sheet.width % columns or sheet.height % rows:
         raise ValueError(f"Sheet dimensions {sheet.size} are not divisible by {columns}x{rows}.")
@@ -68,7 +70,7 @@ def process_sheet(source: Path, output_dir: Path, columns: int, rows: int, frame
             index = row * columns + column
             cell = sheet.crop((column * cell_width, row * cell_height, (column + 1) * cell_width, (row + 1) * cell_height))
             output = output_dir / f"{frame_prefix}{index}.png"
-            remove_green_background(cell, green_threshold).resize((frame_size, frame_size), Image.Resampling.LANCZOS).save(output, optimize=True)
+            remove_green_background(cell, green_threshold, keep_all_foreground).resize((frame_size, frame_size), Image.Resampling.LANCZOS).save(output, optimize=True)
             outputs.append(output)
     return outputs
 
@@ -85,6 +87,7 @@ def main() -> None:
     parser.add_argument("--frame-size", type=int, default=256)
     parser.add_argument("--frame-prefix", default="frame-", help="Output filename prefix (default: frame-)")
     parser.add_argument("--green-threshold", type=int, default=75)
+    parser.add_argument("--keep-all-foreground", action="store_true", help="Keep detached foreground effects instead of only the largest connected subject")
     args = parser.parse_args()
 
     has_background = args.background is not None or args.background_output is not None
@@ -106,7 +109,7 @@ def main() -> None:
         background.save(args.background_output, optimize=True)
         print(args.background_output)
     if has_sheet:
-        for output in process_sheet(args.sprite_sheet, args.frames_output_dir, args.columns, args.rows, args.frame_size, args.green_threshold, args.frame_prefix):
+        for output in process_sheet(args.sprite_sheet, args.frames_output_dir, args.columns, args.rows, args.frame_size, args.green_threshold, args.frame_prefix, args.keep_all_foreground):
             print(output)
 
 

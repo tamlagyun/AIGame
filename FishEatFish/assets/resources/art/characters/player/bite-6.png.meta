@@ -1,0 +1,5 @@
+{
+  "ver": "1.0.27", "importer": "image", "imported": true, "uuid": "d28e1712-459e-4fc1-a9f2-0679d594d009", "files": [".json", ".png"],
+  "subMetas": { "6c48a": { "importer": "texture", "uuid": "d28e1712-459e-4fc1-a9f2-0679d594d009@6c48a", "displayName": "bite-6", "id": "6c48a", "name": "texture", "userData": { "wrapModeS": "repeat", "wrapModeT": "repeat", "minfilter": "linear", "magfilter": "linear", "mipfilter": "none", "anisotropy": 0, "isUuid": true, "imageUuidOrDatabaseUri": "d28e1712-459e-4fc1-a9f2-0679d594d009", "visible": false }, "ver": "1.0.22", "imported": true, "files": [".json"], "subMetas": {} } },
+  "userData": { "type": "texture", "fixAlphaTransparencyArtifacts": false, "hasAlpha": true, "redirect": "d28e1712-459e-4fc1-a9f2-0679d594d009@6c48a" }
+}

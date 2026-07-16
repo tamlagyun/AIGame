@@ -1,7 +1,13 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "fish-player-crucian",
   "displayName": "小鲫鱼",
+  "artFacingDirection": "right",
+  "animationArtFacingDirections": {
+    "swim": "right",
+    "bite": "left",
+    "hurt": "right"
+  },
   "maxHealth": 100,
   "moveSpeed": 260,
   "experienceReward": 10,
@@ -9,4 +15,3 @@
   "basicAttackId": "skill-basic-bite",
   "initialSkillId": "skill-dash-bite"
 }
-

@@ -1,14 +1,22 @@
-export const CONFIG_SCHEMA_VERSION = 1;
+export const CONFIG_SCHEMA_VERSION = 2;
 export const SAVE_SCHEMA_VERSION = 1;
+
+export type ArtFacingDirection = 'left' | 'right';
 
 export type FishCollider =
   | { kind: 'circle'; radius: number }
   | { kind: 'capsule'; radius: number; length: number };
 
 export interface FishConfig {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
   displayName: string;
+  artFacingDirection: ArtFacingDirection;
+  animationArtFacingDirections: {
+    swim: ArtFacingDirection;
+    bite: ArtFacingDirection;
+    hurt: ArtFacingDirection;
+  };
   maxHealth: number;
   moveSpeed: number;
   experienceReward: number;
@@ -18,7 +26,7 @@ export interface FishConfig {
 }
 
 export interface SkillConfig {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
   displayName: string;
   animationState: 'bite' | 'dashBite';
@@ -29,7 +37,7 @@ export interface SkillConfig {
 }
 
 export interface WorldConfig {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
   width: number;
   height: number;
@@ -93,4 +101,3 @@ export interface SaveData {
     completedSteps: string[];
   };
 }
-

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "skill-basic-bite",
   "displayName": "普通撕咬",
   "animationState": "bite",
@@ -8,4 +8,3 @@
   "cooldownSeconds": 0.55,
   "dashDistance": 0
 }
-

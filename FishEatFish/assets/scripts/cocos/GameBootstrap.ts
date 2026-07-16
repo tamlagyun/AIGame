@@ -9,8 +9,10 @@ import {
   ImageAsset,
   input,
   Input,
+  JsonAsset,
   KeyCode,
   Label,
+  LabelOutline,
   Graphics,
   Node,
   resources,
@@ -25,7 +27,9 @@ import {
   Widget,
   tween
 } from 'cc';
-import { movementAngleDegrees, moveWithinBounds } from '../core/MovementSystem.ts';
+import { horizontalFacingAngleDegrees, horizontalScaleForFacing, moveWithinBounds, normalizeHorizontalFacingAngle, shouldFlipArtFrame, type HorizontalFacingAngle } from '../core/MovementSystem.ts';
+import type { ArtFacingDirection } from '../core/types.ts';
+import { parseFishConfig } from '../data/ConfigValidator.ts';
 import { createPlatformService } from '../platform/PlatformAdapters.ts';
 import { RealtimeSession } from '../network/RealtimeSession.ts';
 import { RemotePlayerRegistry } from '../network/RemotePlayerRegistry.ts';
@@ -46,21 +50,29 @@ export class GameBootstrap extends Component {
   private removeResumeListener?: () => void;
   private playerNode?: Node;
   private playerSprite?: Sprite;
+  private playerFacingAngle: HorizontalFacingAngle = 180;
+  private artFacingDirection!: ArtFacingDirection;
   private cameraNode?: Node;
   private hudRoot?: Node;
   private actionHint?: Label;
   private healthLabel?: Label;
   private fishHealthOverlay?: Node;
-  private readonly fishHealthDisplays = new Map<string, { fish: Node; node: Node; label: Label }>();
+  private readonly fishHealthDisplays = new Map<string, { fish: Node; node: Node; fill: Sprite; label: Label }>();
   private readonly fishNameDisplays = new Map<string, { fish: Node; node: Node; label: Label }>();
   private skillCooldownRemaining = 0;
   private basicCooldownRemaining = 0;
   private joystickKnob?: Node;
   private joystickNode?: Node;
   private swimFrames: SpriteFrame[] = [];
+  private biteFrames: SpriteFrame[] = [];
+  private hurtFrames: SpriteFrame[] = [];
+  private healthBarFrame?: SpriteFrame;
+  private healthBarFill?: SpriteFrame;
+  private readonly remoteAnimationTokens = new WeakMap<Sprite, number>();
+  private readonly remoteSwimStates = new Map<Sprite, { frameIndex: number; elapsed: number; active: boolean }>();
   private swimFrameIndex = 0;
   private animationElapsed = 0;
-  private fishActionState: 'swim' | 'bite' | 'dashBite' = 'swim';
+  private fishActionState: 'swim' | 'bite' | 'dashBite' | 'hurt' = 'swim';
   private fishActionElapsed = 0;
   private fishActionDuration = 0;
   private localHealth = 100;
@@ -102,6 +114,7 @@ export class GameBootstrap extends Component {
     this.removeResumeListener?.();
     this.realtime.close();
     this.remotePlayers?.clear();
+    this.remoteSwimStates.clear();
     this.fishHealthDisplays.clear();
     this.fishNameDisplays.clear();
     this.loginDom?.remove();
@@ -111,6 +124,9 @@ export class GameBootstrap extends Component {
     if (!this.playerNode || !this.playerSprite || !this.cameraNode) return;
     this.skillCooldownRemaining = Math.max(0, this.skillCooldownRemaining - deltaTime);
     this.basicCooldownRemaining = Math.max(0, this.basicCooldownRemaining - deltaTime);
+    this.updateFishAction(deltaTime);
+    this.advanceRemoteSwimAnimations(deltaTime);
+    if (this.loginDialog || this.loginDom) { this.updateFishHealthDisplays(); return; }
     if (this.localDead) { this.updateFishHealthDisplays(); return; }
 
     const keyboard = this.readKeyboardDirection();
@@ -134,16 +150,15 @@ export class GameBootstrap extends Component {
     );
     this.playerNode.setPosition(next.x, next.y, 0);
 
-    const movementAngle = movementAngleDegrees(direction);
-    if (movementAngle !== null) this.playerNode.angle = movementAngle;
+    this.playerFacingAngle = horizontalFacingAngleDegrees(direction, this.playerFacingAngle);
+    this.applyHorizontalFacing(this.playerNode, this.playerFacingAngle);
     this.advanceSwimAnimation(deltaTime, moving);
-    this.updateFishAction(deltaTime);
     this.followPlayer(next.x, next.y);
     this.updateFishHealthDisplays();
     this.networkInputElapsed += deltaTime;
     if (this.networkInputElapsed >= 0.05) {
       this.networkInputElapsed = 0;
-      this.realtime.sendInput({ clientTick: ++this.networkClientTick, moveX: direction.x, moveY: direction.y, rotation: this.playerNode.angle });
+      this.realtime.sendInput({ clientTick: ++this.networkClientTick, moveX: direction.x, moveY: direction.y, rotation: this.playerFacingAngle });
     }
   }
 
@@ -155,8 +170,11 @@ export class GameBootstrap extends Component {
     if (!worldRoot || !playerLayer || !this.cameraNode || !this.hudRoot) {
       throw new Error('MainScene 缺少世界、玩家、镜头或 HUD 节点。');
     }
-    // HUD 使用屏幕坐标，不能跟随世界相机移动。
-    this.hudRoot.setPosition(-640, -360, 0);
+    const playerFishConfig = parseFishConfig(await this.loadJson('configs/fish-player'));
+    this.artFacingDirection = playerFishConfig.artFacingDirection;
+    // WorldRoot、HudRoot 和 MainCamera 共用 Canvas 中心作为局部原点。
+    // Canvas 的锚点换算由引擎负责，子根节点不得再次减去半屏尺寸。
+    this.hudRoot.setPosition(0, 0, 0);
     const safeArea = this.hudRoot.getChildByName('SafeAreaRoot');
     const inputLayer = safeArea?.getChildByName('InputLayer');
     if (inputLayer) {
@@ -172,13 +190,19 @@ export class GameBootstrap extends Component {
     const [backgroundImage, ...images] = await Promise.all([
       this.loadImage('art/map/sea-background'),
       ...Array.from({ length: 6 }, (_, index) => this.loadImage(`art/characters/player/swim-${index}`)),
+      ...Array.from({ length: 8 }, (_, index) => this.loadImage(`art/characters/player/bite-${index}`)),
+      ...Array.from({ length: 8 }, (_, index) => this.loadImage(`art/characters/player/hurt-${index}`)),
       this.loadImage('art/ui/joystick-base'),
       this.loadImage('art/ui/joystick-knob'),
       this.loadImage('art/ui/basic-attack'),
-      this.loadImage('art/ui/skill-dash')
+      this.loadImage('art/ui/skill-dash'),
+      this.loadImage('art/ui/health-bar-frame'),
+      this.loadImage('art/ui/health-bar-fill')
     ]);
     const fishImages = images.slice(0, 6);
-    const [joystickBase, joystickKnob, basicAttack, skillDash] = images.slice(6);
+    const biteImages = images.slice(6, 14);
+    const hurtImages = images.slice(14, 22);
+    const [joystickBase, joystickKnob, basicAttack, skillDash, healthBarFrame, healthBarFill] = images.slice(22);
 
     const background = new Node('OceanMap');
     background.layer = worldRoot.layer;
@@ -190,7 +214,11 @@ export class GameBootstrap extends Component {
     worldRoot.addChild(background);
     background.setSiblingIndex(0);
 
-    this.swimFrames = fishImages.map((image) => this.createSpriteFrame(image));
+    this.swimFrames = fishImages.map((image) => this.createFishSpriteFrame(image, playerFishConfig.animationArtFacingDirections.swim));
+    this.biteFrames = biteImages.map((image) => this.createFishSpriteFrame(image, playerFishConfig.animationArtFacingDirections.bite));
+    this.hurtFrames = hurtImages.map((image) => this.createFishSpriteFrame(image, playerFishConfig.animationArtFacingDirections.hurt));
+    this.healthBarFrame = this.createSpriteFrame(healthBarFrame);
+    this.healthBarFill = this.createSpriteFrame(healthBarFill);
     this.playerNode = new Node('PlayerFish');
     this.playerNode.layer = playerLayer.layer;
     const playerTransform = this.playerNode.addComponent(UITransform);
@@ -199,6 +227,7 @@ export class GameBootstrap extends Component {
     this.playerSprite.sizeMode = Sprite.SizeMode.CUSTOM;
     this.playerSprite.spriteFrame = this.swimFrames[0];
     playerLayer.addChild(this.playerNode);
+    this.applyHorizontalFacing(this.playerNode, this.playerFacingAngle);
     this.createFishHealthDisplay('local-player', this.playerNode, this.localHealth, this.localMaxHealth);
     this.createFishNameDisplay('local-player', this.playerNode, '');
     this.remotePlayers = new RemotePlayerRegistry((state) => this.createRemotePlayerView(playerLayer, state));
@@ -216,25 +245,126 @@ export class GameBootstrap extends Component {
     sprite.sizeMode = Sprite.SizeMode.CUSTOM;
     sprite.spriteFrame = this.swimFrames[0];
     parent.addChild(node);
+    this.remoteSwimStates.set(sprite, { frameIndex: 0, elapsed: 0, active: true });
+    let facingAngle = normalizeHorizontalFacingAngle(state.rotation);
+    this.applyHorizontalFacing(node, facingAngle);
     this.createFishHealthDisplay(state.playerId, node, state.health, state.maxHealth);
     this.createFishNameDisplay(state.playerId, node, state.displayName);
-    return { setPosition: (x: number, y: number) => node.setPosition(x, y, 0), setRotation: (angle: number) => { node.angle = angle; }, setHealth: (health: number, maxHealth: number) => this.setFishHealth(state.playerId, health, maxHealth), playSkill: (skillId: string) => { const scale = skillId === 'skill-dash-bite' ? 1.45 : 1.28; const angle = node.angle * Math.PI / 180; if (skillId === 'skill-dash-bite') this.createDashEffect(node.position.x, node.position.y, node.angle); this.createBiteEffect(node.position.x + Math.cos(angle) * 76, node.position.y + Math.sin(angle) * 76, node.angle, skillId === 'skill-dash-bite' ? 96 : 72, skillId === 'skill-dash-bite' ? new Color(120, 230, 255, 235) : new Color(255, 236, 120, 235), 0.2); tween(node).to(0.12, { scale: new Vec3(scale, 0.72, 1) }).to(0.18, { scale: new Vec3(1, 1, 1) }).start(); }, playHurt: () => { const original = sprite.color.clone(); sprite.color = new Color(255, 110, 110, 255); this.scheduleOnce(() => { if (sprite.isValid) sprite.color = original; }, 0.12); }, playDeath: () => { node.active = true; node.setScale(1, 1, 1); tween(node).to(0.25, { scale: new Vec3(0.6, 0.6, 1) }).start(); }, playRespawn: () => { node.active = true; node.setScale(1, 1, 1); }, destroy: () => { this.removeFishHealthDisplay(state.playerId); this.removeFishNameDisplay(state.playerId); node.destroy(); } };
+    return { setPosition: (x: number, y: number) => node.setPosition(x, y, 0), setRotation: (angle: number) => { facingAngle = normalizeHorizontalFacingAngle(angle); this.applyHorizontalFacing(node, facingAngle); }, setHealth: (health: number, maxHealth: number) => this.setFishHealth(state.playerId, health, maxHealth), playSkill: (skillId: string) => {
+      const duration = skillId === 'skill-dash-bite' ? 0.42 : 0.34;
+      const radians = facingAngle * Math.PI / 180;
+      if (skillId === 'skill-dash-bite') this.createDashEffect(node.position.x, node.position.y, facingAngle);
+      this.createBiteEffect(node.position.x + Math.cos(radians) * 76, node.position.y, facingAngle, skillId === 'skill-dash-bite' ? 96 : 72, skillId === 'skill-dash-bite' ? new Color(120, 230, 255, 235) : new Color(255, 236, 120, 235), duration);
+      this.playRemoteFishAnimation(sprite, this.biteFrames, duration);
+    }, playHurt: (skillId: string) => { const duration = skillId === 'skill-dash-bite' ? 0.42 : 0.34; this.playRemoteFishAnimation(sprite, this.hurtFrames, duration); }, playDeath: () => { this.remoteAnimationTokens.set(sprite, (this.remoteAnimationTokens.get(sprite) ?? 0) + 1); const swimState = this.remoteSwimStates.get(sprite); if (swimState) { swimState.active = false; swimState.elapsed = 0; } node.active = true; this.applyHorizontalFacing(node, facingAngle, 0.6); }, playRespawn: () => { this.stopRemoteFishAnimation(sprite); sprite.spriteFrame = this.swimFrames[0] ?? null; node.active = true; this.applyHorizontalFacing(node, facingAngle); }, destroy: () => { this.remoteSwimStates.delete(sprite); this.removeFishHealthDisplay(state.playerId); this.removeFishNameDisplay(state.playerId); node.destroy(); } };
+  }
+
+  private applyHorizontalFacing(node: Node, angle: HorizontalFacingAngle, scale = 1): void {
+    node.angle = 0;
+    // 所有动画帧加载时已归一到配置的默认美术方向；这里只处理逻辑朝向。
+    node.setScale(horizontalScaleForFacing(angle, this.artFacingDirection, scale), scale, 1);
+  }
+
+  private playRemoteFishAnimation(sprite: Sprite, frames: SpriteFrame[], duration: number): void {
+    if (frames.length === 0) return;
+    const swimState = this.remoteSwimStates.get(sprite);
+    if (swimState) { swimState.active = false; swimState.elapsed = 0; }
+    const token = (this.remoteAnimationTokens.get(sprite) ?? 0) + 1;
+    this.remoteAnimationTokens.set(sprite, token);
+    const frameDuration = duration / frames.length;
+    frames.forEach((frame, index) => this.scheduleOnce(() => {
+      if (sprite.isValid && this.remoteAnimationTokens.get(sprite) === token) sprite.spriteFrame = frame;
+    }, index * frameDuration));
+    this.scheduleOnce(() => {
+      if (sprite.isValid && this.remoteAnimationTokens.get(sprite) === token) {
+        sprite.spriteFrame = this.swimFrames[0] ?? null;
+        if (swimState) { swimState.frameIndex = 0; swimState.elapsed = 0; swimState.active = true; }
+      }
+    }, duration);
+  }
+
+  private stopRemoteFishAnimation(sprite: Sprite): void {
+    this.remoteAnimationTokens.set(sprite, (this.remoteAnimationTokens.get(sprite) ?? 0) + 1);
+    const swimState = this.remoteSwimStates.get(sprite);
+    if (swimState) { swimState.frameIndex = 0; swimState.elapsed = 0; swimState.active = true; }
+  }
+
+  private advanceRemoteSwimAnimations(deltaTime: number): void {
+    if (this.swimFrames.length === 0) return;
+    for (const [sprite, state] of this.remoteSwimStates) {
+      if (!sprite.isValid || !state.active) continue;
+      state.elapsed += deltaTime;
+      while (state.elapsed >= 0.11) {
+        state.elapsed -= 0.11;
+        state.frameIndex = (state.frameIndex + 1) % this.swimFrames.length;
+        sprite.spriteFrame = this.swimFrames[state.frameIndex] ?? this.swimFrames[0];
+      }
+    }
   }
 
   private createFishHealthDisplay(id: string, fish: Node, health: number, maxHealth: number): void {
-    if (!this.fishHealthOverlay || this.fishHealthDisplays.has(id)) return;
-    const node = new Node(`FishHealth-${id}`); node.layer = this.fishHealthOverlay.layer;
-    const transform = node.addComponent(UITransform); transform.setContentSize(132, 28);
-    const label = node.addComponent(Label); label.fontSize = 18; label.lineHeight = 22; label.color = new Color(255, 245, 180, 255);
+    if (!this.fishHealthOverlay || !this.healthBarFrame || !this.healthBarFill || this.fishHealthDisplays.has(id)) return;
+    const node = new Node(`FishHealth-${id}`);
+    node.layer = this.fishHealthOverlay.layer;
+    const transform = node.addComponent(UITransform);
+    transform.setContentSize(176, 48);
+    transform.setAnchorPoint(0.5, 0.5);
     this.fishHealthOverlay.addChild(node);
-    this.fishHealthDisplays.set(id, { fish, node, label });
+
+    const frameNode = new Node('HealthBarFrame');
+    frameNode.layer = node.layer;
+    const frameTransform = frameNode.addComponent(UITransform);
+    frameTransform.setContentSize(168, 44);
+    frameTransform.setAnchorPoint(0.5, 0.5);
+    const frame = frameNode.addComponent(Sprite);
+    frame.sizeMode = Sprite.SizeMode.CUSTOM;
+    frame.spriteFrame = this.healthBarFrame;
+    node.addChild(frameNode);
+    frameNode.setPosition(0, 0, 0);
+
+    const fillNode = new Node('HealthBarFill');
+    fillNode.layer = node.layer;
+    const fillTransform = fillNode.addComponent(UITransform);
+    fillTransform.setContentSize(144, 22);
+    fillTransform.setAnchorPoint(0.5, 0.5);
+    const fill = fillNode.addComponent(Sprite);
+    fill.sizeMode = Sprite.SizeMode.CUSTOM;
+    fill.spriteFrame = this.healthBarFill;
+    fill.type = Sprite.Type.FILLED;
+    fill.fillType = Sprite.FillType.HORIZONTAL;
+    fill.fillStart = 0;
+    fill.fillRange = 1;
+    node.addChild(fillNode);
+    fillNode.setPosition(0, 0, 0);
+
+    const labelNode = new Node('HealthValueLabel');
+    labelNode.layer = node.layer;
+    const labelTransform = labelNode.addComponent(UITransform);
+    labelTransform.setContentSize(168, 32);
+    labelTransform.setAnchorPoint(0.5, 0.5);
+    const label = labelNode.addComponent(Label);
+    label.fontSize = 17;
+    label.lineHeight = 22;
+    label.horizontalAlign = Label.HorizontalAlign.CENTER;
+    label.verticalAlign = Label.VerticalAlign.CENTER;
+    label.color = new Color(255, 255, 255, 255);
+    const outline = labelNode.addComponent(LabelOutline);
+    outline.color = new Color(8, 35, 58, 255);
+    outline.width = 2;
+    node.addChild(labelNode);
+    labelNode.setPosition(0, 0, 0);
+
+    this.fishHealthDisplays.set(id, { fish, node, fill, label });
     this.setFishHealth(id, health, maxHealth);
   }
 
   private setFishHealth(id: string, health: number, maxHealth: number): void {
-    const display = this.fishHealthDisplays.get(id); if (!display) return;
-    display.label.string = `HP ${Math.max(0, Math.ceil(health))}/${maxHealth}`;
-    display.label.color = health > maxHealth * 0.35 ? new Color(255, 245, 180, 255) : new Color(255, 130, 130, 255);
+    const display = this.fishHealthDisplays.get(id);
+    if (!display) return;
+    const safeMaxHealth = Number.isFinite(maxHealth) && maxHealth > 0 ? maxHealth : 1;
+    const safeHealth = Number.isFinite(health) ? Math.min(safeMaxHealth, Math.max(0, health)) : 0;
+    display.fill.fillRange = safeHealth / safeMaxHealth;
+    display.label.string = `${Math.ceil(safeHealth)}/${Math.ceil(safeMaxHealth)}`;
   }
 
   private removeFishHealthDisplay(id: string): void { const display = this.fishHealthDisplays.get(id); display?.node.destroy(); this.fishHealthDisplays.delete(id); }
@@ -253,13 +383,13 @@ export class GameBootstrap extends Component {
   private updateFishHealthDisplays(): void {
     const overlayTransform = this.fishHealthOverlay?.getComponent(UITransform); if (!overlayTransform) return;
     for (const display of this.fishHealthDisplays.values()) {
-      const world = display.fish.worldPosition.clone(); world.y += 118;
+      const world = display.fish.worldPosition.clone(); world.y += 120;
       const screen = overlayTransform.convertToNodeSpaceAR(world);
       display.node.setPosition(screen.x, screen.y, 0);
       display.node.angle = 0;
     }
     for (const display of this.fishNameDisplays.values()) {
-      const world = display.fish.worldPosition.clone(); world.y += 146;
+      const world = display.fish.worldPosition.clone(); world.y += 160;
       const screen = overlayTransform.convertToNodeSpaceAR(world);
       display.node.setPosition(screen.x, screen.y, 0);
       display.node.angle = 0;
@@ -345,10 +475,46 @@ export class GameBootstrap extends Component {
     this.createDialogLabel(panel, '测试环境登录', 30, new Color(255, 245, 180, 255), 0, 88);
     this.createDialogLabel(panel, '输入用户名后进入默认海域', 20, new Color(230, 245, 255, 255), 0, 42);
     const background = new Node('EditorUsernameBackground'); background.layer = panel.layer; const backgroundTransform = background.addComponent(UITransform); backgroundTransform.setContentSize(360, 56); backgroundTransform.setAnchorPoint(0.5, 0.5); const backgroundGraphics = background.addComponent(Graphics); backgroundGraphics.fillColor = new Color(255, 255, 255, 245); backgroundGraphics.roundRect(-180, -28, 360, 56, 12); backgroundGraphics.fill(); panel.addChild(background); background.setPosition(0, -12, 0);
-    const inputNode = new Node('EditorUsernameInput'); inputNode.layer = panel.layer; const inputTransform = inputNode.addComponent(UITransform); inputTransform.setContentSize(340, 46); inputTransform.setAnchorPoint(0.5, 0.5); const usernameInput = inputNode.addComponent(EditBox); usernameInput.placeholder = '用户名（1-16 个字符）'; usernameInput.maxLength = 16; usernameInput.fontSize = 22; usernameInput.fontColor = new Color(18, 66, 96, 255); usernameInput.placeholderFontSize = 20; usernameInput.placeholderFontColor = new Color(100, 132, 152, 255); usernameInput.string = this.testUsername; background.addChild(inputNode); inputNode.setPosition(0, 0, 0);
+    const inputNode = new Node('EditorUsernameInput'); inputNode.layer = panel.layer; const inputTransform = inputNode.addComponent(UITransform); inputTransform.setContentSize(340, 46); inputTransform.setAnchorPoint(0.5, 0.5); const usernameInput = inputNode.addComponent(EditBox); usernameInput.inputMode = EditBox.InputMode.SINGLE_LINE; usernameInput.placeholder = '用户名（1-16 个字符）'; usernameInput.maxLength = 16; usernameInput.fontSize = 22; usernameInput.fontColor = new Color(18, 66, 96, 255); usernameInput.placeholderFontSize = 20; usernameInput.placeholderFontColor = new Color(100, 132, 152, 255); usernameInput.string = this.testUsername; background.addChild(inputNode); inputNode.setPosition(0, 0, 0);
+    inputNode.on(EditBox.EventType.EDITING_DID_BEGAN, () => this.alignEditorEditBoxDom(usernameInput));
     const submit = () => { const username = usernameInput.string.trim(); if (!username) { this.actionHint && (this.actionHint.string = '请输入用户名'); return; } this.testUsername = username; this.setFishName('local-player', username); dialog.destroy(); this.loginDialog = undefined; void this.connectOnline(username); };
     const submitButton = this.createDialogButton(panel, '进入海域', 0, -96, submit); submitButton.name = 'EditorTestLoginSubmitButton';
     this.loginDialog = dialog;
+  }
+
+  private alignEditorEditBoxDom(editBox: EditBox): void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    const apply = () => {
+      const impl = editBox._impl as unknown as { _edTxt?: HTMLInputElement | HTMLTextAreaElement } | null;
+      const element = impl?._edTxt;
+      const canvas = (document.getElementById('GameCanvas') ?? document.querySelector('canvas')) as HTMLCanvasElement | null;
+      if (!element || !canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = rect.width / 1280;
+      const scaleY = rect.height / 720;
+      const width = 340 * scaleX;
+      const height = 46 * scaleY;
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2 + 12 * scaleY;
+      element.style.position = 'fixed';
+      element.style.left = `${centerX - width / 2}px`;
+      element.style.top = `${centerY - height / 2}px`;
+      element.style.bottom = 'auto';
+      element.style.width = `${width}px`;
+      element.style.height = `${height}px`;
+      element.style.transform = 'none';
+      element.style.setProperty('-webkit-transform', 'none');
+      element.style.transformOrigin = 'center center';
+      element.style.boxSizing = 'border-box';
+      element.style.padding = `0 ${Math.max(6, 10 * scaleX)}px`;
+      element.style.overflow = 'hidden';
+      element.style.fontSize = `${Math.max(14, 22 * scaleY)}px`;
+      element.style.lineHeight = `${height}px`;
+      element.style.color = '#124260';
+      element.style.background = 'transparent';
+      element.style.zIndex = '2147483647';
+    };
+    window.requestAnimationFrame(() => window.requestAnimationFrame(apply));
   }
 
   private showConnectionDialog(reason: string): void {
@@ -399,7 +565,7 @@ export class GameBootstrap extends Component {
       const effect = message.payload as SkillEffect;
       if (effect.playerId !== this.networkPlayerId) {
         this.remotePlayers?.upsert({ playerId: effect.playerId, displayName: '远端玩家', x: effect.x, y: effect.y, rotation: effect.rotation, lastProcessedClientTick: effect.clientTick, health: 100, maxHealth: 100, level: 1, dead: false });
-        this.remotePlayers?.playSkill(effect.playerId, effect.skillId);
+        this.remotePlayers?.playSkill(effect.playerId, effect.skillId, effect.actionSequence);
       }
     } else if (message.type === 'skillResolved') {
       const result = message.payload as SkillResolved;
@@ -411,22 +577,22 @@ export class GameBootstrap extends Component {
       }
     } else if (message.type === 'playerDamaged') {
       const event = message.payload as PlayerDamaged;
-      if (event.targetId === this.networkPlayerId) { this.localHealth = event.health; this.localMaxHealth = event.maxHealth; this.updateHealthHud(); this.actionHint && (this.actionHint.string = `受到撕咬伤害：${event.damage}，生命 ${event.health}/${event.maxHealth}`); this.startFishAction('bite', 0.2); }
-      else { this.remotePlayers?.setHealth(event.targetId, event.health, event.maxHealth); this.remotePlayers?.playHurt(event.targetId); }
+      if (event.targetId === this.networkPlayerId) { this.localHealth = event.health; this.localMaxHealth = event.maxHealth; this.updateHealthHud(); this.actionHint && (this.actionHint.string = `受到撕咬伤害：${event.damage}，生命 ${event.health}/${event.maxHealth}`); this.startFishAction('hurt', event.skillId === 'skill-dash-bite' ? 0.42 : 0.34); }
+      else { this.remotePlayers?.setHealth(event.targetId, event.health, event.maxHealth); this.remotePlayers?.playHurt(event.targetId, event.skillId); }
     } else if (message.type === 'playerDied') {
       const event = message.payload as PlayerDied;
-      if (event.targetId === this.networkPlayerId) { this.localDead = true; this.playerNode?.setScale(0.6, 0.6, 1); this.actionHint && (this.actionHint.string = '你已被击败，3 秒后复活'); }
+      if (event.targetId === this.networkPlayerId) { this.localDead = true; if (this.playerNode) this.applyHorizontalFacing(this.playerNode, this.playerFacingAngle, 0.6); this.actionHint && (this.actionHint.string = '你已被击败，3 秒后复活'); }
       else this.remotePlayers?.playDeath(event.targetId);
     } else if (message.type === 'playerRespawned') {
       const event = message.payload as PlayerRespawned;
-      if (event.playerId === this.networkPlayerId) { this.localDead = false; this.localHealth = event.health; this.localMaxHealth = event.maxHealth; this.updateHealthHud(); this.playerNode?.setScale(1, 1, 1); this.playerNode?.setPosition(event.x, event.y, 0); this.actionHint && (this.actionHint.string = '已复活，3 秒无敌'); }
+      if (event.playerId === this.networkPlayerId) { this.localDead = false; this.localHealth = event.health; this.localMaxHealth = event.maxHealth; this.updateHealthHud(); if (this.playerNode) this.applyHorizontalFacing(this.playerNode, this.playerFacingAngle); this.playerNode?.setPosition(event.x, event.y, 0); this.actionHint && (this.actionHint.string = '已复活，3 秒无敌'); }
       else { this.remotePlayers?.upsert({ playerId: event.playerId, displayName: '远端玩家', x: event.x, y: event.y, rotation: 0, lastProcessedClientTick: 0, health: event.health, maxHealth: event.maxHealth, level: 1, dead: false }); this.remotePlayers?.playRespawn(event.playerId); }
     } else if (message.type === 'combatSettlement') {
       const event = message.payload as CombatSettlement;
       if (event.playerId === this.networkPlayerId) { this.localHealth = event.health; this.localMaxHealth = event.maxHealth; this.updateHealthHud(); this.actionHint && (this.actionHint.string = event.leveled ? `击败玩家，升级至 ${event.level} 级，生命上限 ${event.maxHealth}` : `击败玩家，获得经验，击杀 ${event.kills}`); }
     } else if (message.type === 'stateCorrection') {
       const state = message.payload as RemotePlayerState;
-      if (state.playerId === this.networkPlayerId) { this.localHealth = state.health; this.localMaxHealth = state.maxHealth; this.localDead = state.dead; this.updateHealthHud(); this.playerNode?.setPosition(state.x, state.y, 0); if (this.playerNode) { this.playerNode.angle = state.rotation; this.playerNode.active = true; } }
+      if (state.playerId === this.networkPlayerId) { this.localHealth = state.health; this.localMaxHealth = state.maxHealth; this.localDead = state.dead; this.updateHealthHud(); this.playerNode?.setPosition(state.x, state.y, 0); if (this.playerNode) { this.playerFacingAngle = normalizeHorizontalFacingAngle(state.rotation); this.applyHorizontalFacing(this.playerNode, this.playerFacingAngle, state.dead ? 0.6 : 1); this.playerNode.active = true; } }
     }
   }
 
@@ -484,12 +650,12 @@ export class GameBootstrap extends Component {
   private triggerBasicBite(): void {
     if (!this.playerNode || this.basicCooldownRemaining > 0) return;
     this.basicCooldownRemaining = 0.55;
-    this.startFishAction('bite', 0.26);
+    this.startFishAction('bite', 0.34);
     this.sendSkillEvent('skill-basic-bite');
-    const angle = this.playerNode.angle * Math.PI / 180;
-    const x = this.playerNode.position.x + Math.cos(angle) * 76;
-    const y = this.playerNode.position.y + Math.sin(angle) * 76;
-    this.createBiteEffect(x, y, this.playerNode.angle, 72, new Color(255, 236, 120, 235), 0.16);
+    const radians = this.playerFacingAngle * Math.PI / 180;
+    const x = this.playerNode.position.x + Math.cos(radians) * 76;
+    const y = this.playerNode.position.y;
+    this.createBiteEffect(x, y, this.playerFacingAngle, 72, new Color(255, 236, 120, 235), 0.16);
     this.actionHint && (this.actionHint.string = '普通撕咬：攻击范围 72');
   }
 
@@ -498,16 +664,16 @@ export class GameBootstrap extends Component {
     this.skillCooldownRemaining = 5;
     this.startFishAction('dashBite', 0.42);
     this.sendSkillEvent('skill-dash-bite');
-    const angle = this.playerNode.angle * Math.PI / 180;
+    const angle = this.playerFacingAngle * Math.PI / 180;
     const start = this.playerNode.position;
     const direction = { x: Math.cos(angle), y: Math.sin(angle) };
     const next = moveWithinBounds(
       { x: start.x, y: start.y }, direction, 240, 1,
       { minX: -GameBootstrap.WORLD_WIDTH / 2 + GameBootstrap.PLAYER_MARGIN, maxX: GameBootstrap.WORLD_WIDTH / 2 - GameBootstrap.PLAYER_MARGIN, minY: -GameBootstrap.WORLD_HEIGHT / 2 + GameBootstrap.PLAYER_MARGIN, maxY: GameBootstrap.WORLD_HEIGHT / 2 - GameBootstrap.PLAYER_MARGIN }
     );
-    this.createDashEffect(start.x, start.y, this.playerNode.angle);
+    this.createDashEffect(start.x, start.y, this.playerFacingAngle);
     this.playerNode.setPosition(next.x, next.y, 0);
-    this.createBiteEffect(next.x + direction.x * 84, next.y + direction.y * 84, this.playerNode.angle, 96, new Color(120, 230, 255, 235), 0.22);
+    this.createBiteEffect(next.x + direction.x * 84, next.y, this.playerFacingAngle, 96, new Color(120, 230, 255, 235), 0.22);
     this.actionHint && (this.actionHint.string = '冲刺撕咬：突进 240，冷却 5 秒');
   }
 
@@ -515,32 +681,30 @@ export class GameBootstrap extends Component {
     if (!this.playerNode) return;
     const position = this.playerNode.position;
     // 服务端只信任它保存的朝向。技能前先发送当前朝向，确保快速转向后立即撕咬不会按旧朝向判定。
-    this.realtime.sendInput({ clientTick: ++this.networkClientTick, moveX: 0, moveY: 0, rotation: this.playerNode.angle });
-    this.realtime.sendSkill({ skillId, clientTick: ++this.networkClientTick, x: position.x, y: position.y, rotation: this.playerNode.angle });
+    this.realtime.sendInput({ clientTick: ++this.networkClientTick, moveX: 0, moveY: 0, rotation: this.playerFacingAngle });
+    this.realtime.sendSkill({ skillId, clientTick: ++this.networkClientTick, x: position.x, y: position.y, rotation: this.playerFacingAngle });
   }
 
-  private startFishAction(state: 'bite' | 'dashBite', duration: number): void {
+  private startFishAction(state: 'bite' | 'dashBite' | 'hurt', duration: number): void {
     this.fishActionState = state;
     this.fishActionElapsed = 0;
     this.fishActionDuration = duration;
-    if (this.playerSprite && this.swimFrames.length > 0) {
-      // 使用动作状态对应的关键帧作为起始姿态，随后由缩放曲线完成前伸/回弹。
-      this.playerSprite.spriteFrame = this.swimFrames[state === 'bite' ? 2 : 4] ?? this.swimFrames[0];
-    }
+    const frames = state === 'hurt' ? this.hurtFrames : this.biteFrames;
+    if (this.playerSprite && frames.length > 0) this.playerSprite.spriteFrame = frames[0];
   }
 
   private updateFishAction(deltaTime: number): void {
     if (!this.playerNode || this.fishActionState === 'swim') return;
     this.fishActionElapsed += deltaTime;
     const progress = Math.min(1, this.fishActionElapsed / this.fishActionDuration);
-    const wave = Math.sin(progress * Math.PI);
-    const stretch = this.fishActionState === 'dashBite' ? 0.48 : 0.32;
-    this.playerNode.setScale(1 + stretch * wave, 1 - stretch * 0.42 * wave, 1);
+    const frames = this.fishActionState === 'hurt' ? this.hurtFrames : this.biteFrames;
+    const index = Math.min(frames.length - 1, Math.floor(progress * frames.length));
+    if (this.playerSprite && index >= 0) this.playerSprite.spriteFrame = frames[index] ?? this.swimFrames[this.swimFrameIndex];
     if (progress >= 1) {
       this.fishActionState = 'swim';
       this.fishActionElapsed = 0;
       this.fishActionDuration = 0;
-      this.playerNode.setScale(1, 1, 1);
+      if (this.playerSprite) this.playerSprite.spriteFrame = this.swimFrames[this.swimFrameIndex] ?? null;
     }
   }
 
@@ -704,9 +868,9 @@ export class GameBootstrap extends Component {
     const cameraX = Math.min(1280, Math.max(-1280, playerX));
     const cameraY = Math.min(720, Math.max(-720, playerY));
     this.cameraNode.setPosition(cameraX, cameraY, 1000);
-    // MainCamera 同时承担 Canvas 渲染，因此 HUD 必须逐帧补偿相机位移。
-    // 这样视觉上始终是屏幕空间 UI，不会停留在海底地图坐标中。
-    this.hudRoot.setPosition(cameraX - 640, cameraY - 360, 0);
+    // MainCamera 同时承担 Canvas 渲染；HUD 与相机是 Canvas 下不同分支，
+    // 使用相同的局部 XY 即可保持屏幕固定，不能混入 Canvas 的半屏锚点偏移。
+    this.hudRoot.setPosition(cameraX, cameraY, 0);
   }
 
   private loadImage(path: string): Promise<ImageAsset> {
@@ -718,11 +882,26 @@ export class GameBootstrap extends Component {
     });
   }
 
+  private loadJson(path: string): Promise<unknown> {
+    return new Promise((resolve, reject) => {
+      resources.load(path, JsonAsset, (error, asset) => {
+        if (error || !asset) reject(error ?? new Error(`无法加载配置：${path}`));
+        else resolve(asset.json);
+      });
+    });
+  }
+
   private createSpriteFrame(image: ImageAsset): SpriteFrame {
     const texture = new Texture2D();
     texture.image = image;
     const spriteFrame = new SpriteFrame();
     spriteFrame.texture = texture;
+    return spriteFrame;
+  }
+
+  private createFishSpriteFrame(image: ImageAsset, sourceFacingDirection: ArtFacingDirection): SpriteFrame {
+    const spriteFrame = this.createSpriteFrame(image);
+    spriteFrame.flipUVX = shouldFlipArtFrame(sourceFacingDirection, this.artFacingDirection);
     return spriteFrame;
   }
 }

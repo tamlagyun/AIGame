@@ -24,6 +24,8 @@ const required = [
   'assets/resources/art/map/sea-background.png',
   'assets/resources/art/characters/player/swim-0.png',
   'assets/resources/art/characters/player/swim-5.png',
+  'assets/resources/art/characters/player/hurt-0.png',
+  'assets/resources/art/characters/player/hurt-7.png',
   'docs/game-requirements.md',
   'docs/requirements-changelog.md',
   'docs/art-direction.md',
@@ -60,9 +62,11 @@ if (!sceneText.includes('"width": 1280') || !sceneText.includes('"height": 720')
   throw new Error('场景设计分辨率不是 1280 × 720');
 }
 
-for (const file of required.filter((path) => path.startsWith('assets/resources/configs/') || path === 'build-config/targets.json')) {
+for (const file of required.filter((path) => path.startsWith('assets/resources/configs/'))) {
   const json = JSON.parse(readFileSync(fromRoot(file), 'utf8'));
-  if (json.schemaVersion !== 1) throw new Error(`${file} 缺少 schemaVersion 1`);
+  if (json.schemaVersion !== 2) throw new Error(`${file} 缺少 schemaVersion 2`);
 }
+const buildTargets = JSON.parse(readFileSync(fromRoot('build-config/targets.json'), 'utf8'));
+if (buildTargets.schemaVersion !== 1) throw new Error('build-config/targets.json 缺少 schemaVersion 1');
 
 console.log(`项目结构检查通过：${required.length} 个关键文件，场景节点和版本基线有效。`);

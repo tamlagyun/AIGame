@@ -5,7 +5,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const requireBase = (value: unknown, kind: string): Record<string, unknown> => {
   if (!isRecord(value)) throw new Error(`${kind} config must be an object`);
-  if (value.schemaVersion !== CONFIG_SCHEMA_VERSION) throw new Error(`${kind} schemaVersion must be 1`);
+  if (value.schemaVersion !== CONFIG_SCHEMA_VERSION) throw new Error(`${kind} schemaVersion must be ${CONFIG_SCHEMA_VERSION}`);
   if (typeof value.id !== 'string' || value.id.length === 0) throw new Error(`${kind} id is required`);
   return value;
 };
@@ -18,6 +18,18 @@ const requirePositive = (value: unknown, key: string): void => {
 
 export const parseFishConfig = (value: unknown): FishConfig => {
   const config = requireBase(value, 'fish');
+  if (config.artFacingDirection !== 'left' && config.artFacingDirection !== 'right') {
+    throw new Error('artFacingDirection must be left or right');
+  }
+  if (!isRecord(config.animationArtFacingDirections)) {
+    throw new Error('animationArtFacingDirections must be an object');
+  }
+  for (const state of ['swim', 'bite', 'hurt']) {
+    const direction = config.animationArtFacingDirections[state];
+    if (direction !== 'left' && direction !== 'right') {
+      throw new Error(`animationArtFacingDirections.${state} must be left or right`);
+    }
+  }
   requirePositive(config.maxHealth, 'maxHealth');
   requirePositive(config.moveSpeed, 'moveSpeed');
   requirePositive(config.experienceReward, 'experienceReward');
@@ -41,4 +53,3 @@ export const parseWorldConfig = (value: unknown): WorldConfig => {
   }
   return config as unknown as WorldConfig;
 };
-
