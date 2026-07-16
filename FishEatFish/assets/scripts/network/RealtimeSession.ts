@@ -1,5 +1,5 @@
 import { NetworkClient } from './NetworkClient.ts';
-import type { NetworkMessage, RoomSnapshot } from './NetworkProtocol.ts';
+import type { NetworkMessage, RoomSnapshot, SkillId } from './NetworkProtocol.ts';
 
 export class RealtimeSession {
   readonly client = new NetworkClient();
@@ -15,6 +15,6 @@ export class RealtimeSession {
   }
   join() { this.client.send('joinRoom', {}); }
   sendInput(input: { clientTick: number; moveX: number; moveY: number; rotation: number }) { this.client.send('input', input); }
-  sendSkill(skill: { skillId: 'skill-basic-bite' | 'skill-dash-bite'; clientTick: number; x: number; y: number; rotation: number }) { this.client.send('skill', skill); }
+  sendSkill(skill: { skillId: SkillId; clientTick: number; x: number; y: number; rotation: number }) { this.client.send('skill', skill); }
   close() { this.client.send('leaveRoom', {}); this.client.close(); }
 }

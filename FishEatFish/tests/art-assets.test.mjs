@@ -25,12 +25,13 @@ test('正式海洋地图保持 16:9 高分辨率位图', () => {
 });
 
 test('UI 控件资源为带透明通道的正式 PNG', () => {
-  for (const name of ['joystick-base', 'joystick-knob', 'basic-attack', 'skill-dash']) {
+  for (const name of ['joystick-base', 'joystick-knob', 'basic-attack', 'skill-dash', 'skill-whale-swallow']) {
     const header = readPngHeader('assets', 'resources', 'art', 'ui', `${name}.png`);
     assert.equal(header.width, 1024);
     assert.equal(header.height, 1024);
     assert.equal(header.colorType, 6);
   }
+  readFileSync(join(root, 'assets', 'resources', 'art', 'ui', 'skill-whale-swallow.png.meta'));
 });
 
 test('鱼儿生命条边框和动态填充为横向透明 PNG', () => {

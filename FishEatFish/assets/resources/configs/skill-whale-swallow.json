@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "id": "skill-whale-swallow",
+  "displayName": "鲸吞",
+  "animationState": "whaleSwallow",
+  "damage": 0,
+  "range": 800,
+  "cooldownSeconds": 8,
+  "dashDistance": 0,
+  "effectDurationSeconds": 3,
+  "scaleMultiplier": 3,
+  "opacity": 0.5
+}

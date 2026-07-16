@@ -8,6 +8,7 @@ import type { InputPayload, SkillPayload } from '../protocol/client-messages.js'
 import type { PlayerSession } from './player-session.js';
 import { createCombatState } from '../combat/combat-state.js';
 import { CombatService } from '../combat/combat-service.js';
+import { WHALE_SWALLOW_DURATION_MS } from '../combat/combat-config.js';
 import { clampPosition } from '../simulation/bounds-system.js';
 
 export class Room {
@@ -36,9 +37,19 @@ export class Room {
   skill(playerId: string, skill: SkillPayload) {
     const source = this.players.get(playerId);
     if (!source) throw new Error('PLAYER_NOT_IN_ROOM');
-    const result = this.combat.useSkill(source, skill.skillId, skill.clientTick, [...this.players.values()], Date.now(), this.tickCount, (distance) => {
+    const now = Date.now();
+    const result = this.combat.useSkill(source, skill.skillId, skill.clientTick, [...this.players.values()], now, this.tickCount, (distance) => {
       const radians = source.rotation * Math.PI / 180;
       const next = clampPosition(source.x + Math.cos(radians) * distance, source.y + Math.sin(radians) * distance, {
+        minX: -this.config.mapWidth / 2,
+        maxX: this.config.mapWidth / 2,
+        minY: -this.config.mapHeight / 2,
+        maxY: this.config.mapHeight / 2
+      });
+      source.x = next.x;
+      source.y = next.y;
+    }, (x, y) => {
+      const next = clampPosition(x, y, {
         minX: -this.config.mapWidth / 2,
         maxX: this.config.mapWidth / 2,
         minY: -this.config.mapHeight / 2,
@@ -50,8 +61,23 @@ export class Room {
     if (result.accepted) {
       source.actionSequence += 1;
       source.activeAction = skill.skillId;
-      source.actionUntil = Date.now() + (skill.skillId === 'skill-dash-bite' ? 420 : 340);
-      this.broadcast(message('skillEffect', { playerId, skillId: skill.skillId, actionSequence: source.actionSequence, clientTick: skill.clientTick, x: source.x, y: source.y, rotation: source.rotation, serverTick: this.tickCount }));
+      source.activeTargetId = result.targetId;
+      const effectDurationMs = skill.skillId === 'skill-whale-swallow'
+        ? WHALE_SWALLOW_DURATION_MS
+        : skill.skillId === 'skill-dash-bite' ? 420 : 340;
+      source.actionUntil = now + effectDurationMs;
+      this.broadcast(message('skillEffect', {
+        playerId,
+        skillId: skill.skillId,
+        actionSequence: source.actionSequence,
+        clientTick: skill.clientTick,
+        x: source.x,
+        y: source.y,
+        rotation: source.rotation,
+        ...(result.targetId ? { targetId: result.targetId } : {}),
+        effectDurationMs,
+        serverTick: this.tickCount
+      }));
     }
     this.sendTo(source, message('skillResolved', { playerId, skillId: skill.skillId, hitCount: result.hitCount, reason: result.reason, serverTick: this.tickCount }));
     for (const event of result.events) this.broadcast(message(event.type, event.payload));
@@ -73,8 +99,26 @@ export class Room {
   }
   snapshot(selfPlayerId?: string): RoomSnapshot { return { roomId: this.id, mapId: this.config.mapId, serverTick: this.tickCount, ...(selfPlayerId ? { selfPlayerId } : {}), players: [...this.players.values()].map((player) => this.playerSnapshot(player)) }; }
   private playerSnapshot(player: PlayerSession): PlayerSnapshot {
-    const actionActive = !player.combat.dead && player.activeAction !== undefined && player.actionUntil > Date.now();
-    return { playerId: player.playerId, displayName: player.displayName, x: player.x, y: player.y, rotation: player.rotation, lastProcessedClientTick: player.lastInput.clientTick, health: player.combat.health, maxHealth: player.combat.maxHealth, level: player.combat.level, dead: player.combat.dead, ...(actionActive ? { action: player.activeAction, actionSequence: player.actionSequence } : {}) };
+    const now = Date.now();
+    const actionActive = !player.combat.dead && player.activeAction !== undefined && player.actionUntil > now;
+    return {
+      playerId: player.playerId,
+      displayName: player.displayName,
+      x: player.x,
+      y: player.y,
+      rotation: player.rotation,
+      lastProcessedClientTick: player.lastInput.clientTick,
+      health: player.combat.health,
+      maxHealth: player.combat.maxHealth,
+      level: player.combat.level,
+      dead: player.combat.dead,
+      ...(actionActive ? {
+        action: player.activeAction,
+        actionSequence: player.actionSequence,
+        ...(player.activeTargetId ? { actionTargetId: player.activeTargetId } : {}),
+        actionRemainingMs: Math.max(0, player.actionUntil - now)
+      } : {})
+    };
   }
   private sendTo(player: PlayerSession, value: unknown) { if (player.socket.readyState === 1) player.socket.send(encode(value as never)); }
   private broadcast(value: unknown) { const encoded = encode(value as never); for (const player of this.players.values()) if (player.socket.readyState === 1) player.socket.send(encoded); }

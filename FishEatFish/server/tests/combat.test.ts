@@ -36,3 +36,49 @@ test('server moves dash bite before authoritative hit detection', () => {
   assert.equal(result.hitCount, 1);
   assert.equal(target.combat.health, 70);
 });
+
+test('whale swallow selects the nearest valid target, teleports without damage and enforces cooldown', () => {
+  const combat = new CombatService();
+  const attacker = player('a', 0);
+  const nearest = player('b', 420, 20);
+  const farther = player('c', 700, 0);
+  let teleport = { x: attacker.x, y: attacker.y };
+  const result = combat.useSkill(
+    attacker,
+    'skill-whale-swallow',
+    1,
+    [attacker, farther, nearest],
+    0,
+    1,
+    undefined,
+    (x, y) => {
+      attacker.x = x;
+      attacker.y = y;
+      teleport = { x, y };
+    }
+  );
+  assert.equal(result.accepted, true);
+  assert.equal(result.targetId, nearest.playerId);
+  assert.deepEqual(teleport, { x: nearest.x, y: nearest.y });
+  assert.equal(nearest.combat.health, 100);
+  assert.equal(result.events.some((event) => event.type === 'playerDamaged'), false);
+
+  const blocked = combat.useSkill(attacker, 'skill-whale-swallow', 2, [attacker, nearest], 1000, 2);
+  assert.equal(blocked.accepted, false);
+  assert.equal(blocked.reason, 'cooldown');
+});
+
+test('whale swallow without a target does not consume its input tick or cooldown', () => {
+  const combat = new CombatService();
+  const attacker = player('a', 0);
+  const target = player('b', 900);
+  const rejected = combat.useSkill(attacker, 'skill-whale-swallow', 1, [attacker, target], 0, 1);
+  assert.equal(rejected.accepted, false);
+  assert.equal(rejected.reason, 'noTarget');
+  assert.equal(attacker.combat.lastSkillTick, 0);
+  assert.equal(attacker.combat.skillCooldowns['skill-whale-swallow'], undefined);
+
+  target.x = 700;
+  const accepted = combat.useSkill(attacker, 'skill-whale-swallow', 1, [attacker, target], 0, 2);
+  assert.equal(accepted.accepted, true);
+});

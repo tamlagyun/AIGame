@@ -16,6 +16,12 @@ const requirePositive = (value: unknown, key: string): void => {
   }
 };
 
+const requireNonNegative = (value: unknown, key: string): void => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${key} must be zero or positive`);
+  }
+};
+
 export const parseFishConfig = (value: unknown): FishConfig => {
   const config = requireBase(value, 'fish');
   if (config.artFacingDirection !== 'left' && config.artFacingDirection !== 'right') {
@@ -38,10 +44,17 @@ export const parseFishConfig = (value: unknown): FishConfig => {
 
 export const parseSkillConfig = (value: unknown): SkillConfig => {
   const config = requireBase(value, 'skill');
-  requirePositive(config.damage, 'damage');
+  if (config.animationState !== 'bite' && config.animationState !== 'dashBite' && config.animationState !== 'whaleSwallow') {
+    throw new Error('animationState must be bite, dashBite or whaleSwallow');
+  }
+  requireNonNegative(config.damage, 'damage');
   requirePositive(config.range, 'range');
-  if (typeof config.cooldownSeconds !== 'number' || config.cooldownSeconds < 0) {
-    throw new Error('cooldownSeconds must be zero or positive');
+  requireNonNegative(config.cooldownSeconds, 'cooldownSeconds');
+  requireNonNegative(config.dashDistance, 'dashDistance');
+  if (config.effectDurationSeconds !== undefined) requirePositive(config.effectDurationSeconds, 'effectDurationSeconds');
+  if (config.scaleMultiplier !== undefined) requirePositive(config.scaleMultiplier, 'scaleMultiplier');
+  if (config.opacity !== undefined && (typeof config.opacity !== 'number' || !Number.isFinite(config.opacity) || config.opacity < 0 || config.opacity > 1)) {
+    throw new Error('opacity must be between zero and one');
   }
   return config as unknown as SkillConfig;
 };

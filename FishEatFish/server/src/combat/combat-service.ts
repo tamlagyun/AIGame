@@ -5,15 +5,54 @@ import { isWithinAttackCone } from './hit-test.js';
 import { invulnerableUntil, respawnAt } from './respawn-policy.js';
 export interface CombatPlayer { playerId: string; x: number; y: number; rotation: number; combat: CombatState; radius?: number; }
 export interface CombatEvent { type: 'hitConfirmed' | 'playerDamaged' | 'playerDied' | 'combatSettlement' | 'playerRespawned'; payload: Record<string, unknown>; }
-export type SkillRejectReason = 'dead' | 'staleInput' | 'cooldown';
-export interface SkillUseResult { accepted: boolean; hitCount: number; reason?: SkillRejectReason; events: CombatEvent[]; }
+export type SkillRejectReason = 'dead' | 'staleInput' | 'cooldown' | 'noTarget';
+export interface SkillUseResult { accepted: boolean; hitCount: number; targetId?: string; reason?: SkillRejectReason; events: CombatEvent[]; }
 export class CombatService {
-  useSkill(source: CombatPlayer, skillId: CombatSkillId, clientTick: number, players: CombatPlayer[], now: number, serverTick: number, applyDash?: (distance: number) => void): SkillUseResult {
+  useSkill(
+    source: CombatPlayer,
+    skillId: CombatSkillId,
+    clientTick: number,
+    players: CombatPlayer[],
+    now: number,
+    serverTick: number,
+    applyDash?: (distance: number) => void,
+    applyTeleport?: (x: number, y: number) => void
+  ): SkillUseResult {
     const config = combatSkills[skillId];
     if (source.combat.dead) return { accepted: false, hitCount: 0, reason: 'dead', events: [] };
     if (clientTick <= source.combat.lastSkillTick) return { accepted: false, hitCount: 0, reason: 'staleInput', events: [] };
     const readyAt = source.combat.skillCooldowns[skillId] ?? 0;
     if (now < readyAt) return { accepted: false, hitCount: 0, reason: 'cooldown', events: [] };
+
+    if (skillId === 'skill-whale-swallow') {
+      const target = players
+        .filter((candidate) =>
+          candidate.playerId !== source.playerId
+          && !candidate.combat.dead
+          && (candidate.combat.invulnerableUntil ?? 0) <= now
+        )
+        .map((candidate) => ({
+          candidate,
+          distanceSquared: (candidate.x - source.x) ** 2 + (candidate.y - source.y) ** 2
+        }))
+        .filter(({ distanceSquared }) => distanceSquared <= config.range ** 2)
+        .sort((left, right) => left.distanceSquared - right.distanceSquared)[0]?.candidate;
+      if (!target) return { accepted: false, hitCount: 0, reason: 'noTarget', events: [] };
+
+      source.combat.lastSkillTick = clientTick;
+      source.combat.skillCooldowns[skillId] = now + config.cooldownSeconds * 1000;
+      applyTeleport?.(target.x, target.y);
+      return {
+        accepted: true,
+        hitCount: 1,
+        targetId: target.playerId,
+        events: [{
+          type: 'hitConfirmed',
+          payload: { attackerId: source.playerId, targetId: target.playerId, skillId, serverTick }
+        }]
+      };
+    }
+
     source.combat.lastSkillTick = clientTick;
     source.combat.skillCooldowns[skillId] = now + config.cooldownSeconds * 1000;
     if (config.dashDistance > 0) applyDash?.(config.dashDistance);

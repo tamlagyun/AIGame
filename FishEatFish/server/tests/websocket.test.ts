@@ -39,5 +39,12 @@ test('two websocket players receive authoritative combat damage', async () => {
   assert.equal(b.messages.some((message) => message.type === 'skillEffect' && message.payload.actionSequence === 1), true);
   assert.equal(b.messages.some((message) => message.type === 'hitConfirmed'), true);
   assert.equal(b.messages.some((message) => message.type === 'playerDamaged' && message.payload.damage === 15), true);
+  const damageCount = b.messages.filter((message) => message.type === 'playerDamaged').length;
+  a.socket.send(JSON.stringify({ protocolVersion: 1, type: 'skill', payload: { skillId: 'skill-whale-swallow', clientTick: 2, x: 0, y: 0, rotation: 0 } }));
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  const whaleEffect = b.messages.find((message) => message.type === 'skillEffect' && message.payload.skillId === 'skill-whale-swallow');
+  assert.equal(typeof whaleEffect?.payload.targetId, 'string');
+  assert.equal(whaleEffect?.payload.effectDurationMs, 3000);
+  assert.equal(b.messages.filter((message) => message.type === 'playerDamaged').length, damageCount);
   a.socket.close(); b.socket.close(); await app.close();
 });

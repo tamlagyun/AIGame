@@ -34,9 +34,10 @@ import { createPlatformService } from '../platform/PlatformAdapters.ts';
 import { RealtimeSession } from '../network/RealtimeSession.ts';
 import { RemotePlayerRegistry } from '../network/RemotePlayerRegistry.ts';
 import { resolveNetworkEndpoint } from '../network/NetworkEnvironment.ts';
-import type { NetworkMessage, RemotePlayerState, SkillEffect, SkillResolved, PlayerDamaged, PlayerDied, PlayerRespawned, CombatSettlement } from '../network/NetworkProtocol.ts';
+import type { NetworkMessage, RemotePlayerState, SkillEffect, SkillResolved, PlayerDamaged, PlayerDied, PlayerRespawned, CombatSettlement, SkillId } from '../network/NetworkProtocol.ts';
 
 const { ccclass } = _decorator;
+type SkillCooldownKey = 'dash' | 'whale';
 
 @ccclass('GameBootstrap')
 export class GameBootstrap extends Component {
@@ -45,6 +46,15 @@ export class GameBootstrap extends Component {
   private static readonly PLAYER_SPEED = 260;
   private static readonly PLAYER_MARGIN = 96;
   private static readonly JOYSTICK_RADIUS = 120;
+  private static readonly ACTION_CONTROLS_WIDTH = 450;
+  private static readonly ACTION_CONTROLS_HEIGHT = 340;
+  private static readonly BASIC_ATTACK_CENTER = new Vec2(350, 104);
+  private static readonly SKILL_ARC_RADIUS = 176;
+  private static readonly SKILL_ARC_ANGLES = [190, 155, 120, 85] as const;
+  private static readonly DASH_SKILL_COOLDOWN_SECONDS = 5;
+  private static readonly WHALE_SKILL_COOLDOWN_SECONDS = 8;
+  private static readonly WHALE_EFFECT_DURATION_MS = 3000;
+  private static readonly SKILL_COOLDOWN_START = 0.25;
 
   private removePauseListener?: () => void;
   private removeResumeListener?: () => void;
@@ -59,7 +69,8 @@ export class GameBootstrap extends Component {
   private fishHealthOverlay?: Node;
   private readonly fishHealthDisplays = new Map<string, { fish: Node; node: Node; fill: Sprite; label: Label }>();
   private readonly fishNameDisplays = new Map<string, { fish: Node; node: Node; label: Label }>();
-  private skillCooldownRemaining = 0;
+  private readonly skillCooldownRemaining: Record<SkillCooldownKey, number> = { dash: 0, whale: 0 };
+  private readonly skillCooldownMasks: Array<{ sprite: Sprite; key: SkillCooldownKey }> = [];
   private basicCooldownRemaining = 0;
   private joystickKnob?: Node;
   private joystickNode?: Node;
@@ -70,6 +81,11 @@ export class GameBootstrap extends Component {
   private healthBarFill?: SpriteFrame;
   private readonly remoteAnimationTokens = new WeakMap<Sprite, number>();
   private readonly remoteSwimStates = new Map<Sprite, { frameIndex: number; elapsed: number; active: boolean }>();
+  private readonly fishVisualScales = new WeakMap<Node, number>();
+  private readonly whaleOpacityTokens = new WeakMap<Sprite, number>();
+  private readonly whaleScaleTokens = new WeakMap<Node, number>();
+  private readonly localWhaleTargetSequences = new Map<string, number>();
+  private localActionSequence = 0;
   private swimFrameIndex = 0;
   private animationElapsed = 0;
   private fishActionState: 'swim' | 'bite' | 'dashBite' | 'hurt' = 'swim';
@@ -115,6 +131,8 @@ export class GameBootstrap extends Component {
     this.realtime.close();
     this.remotePlayers?.clear();
     this.remoteSwimStates.clear();
+    this.skillCooldownMasks.length = 0;
+    this.localWhaleTargetSequences.clear();
     this.fishHealthDisplays.clear();
     this.fishNameDisplays.clear();
     this.loginDom?.remove();
@@ -122,7 +140,9 @@ export class GameBootstrap extends Component {
 
   protected update(deltaTime: number): void {
     if (!this.playerNode || !this.playerSprite || !this.cameraNode) return;
-    this.skillCooldownRemaining = Math.max(0, this.skillCooldownRemaining - deltaTime);
+    this.skillCooldownRemaining.dash = Math.max(0, this.skillCooldownRemaining.dash - deltaTime);
+    this.skillCooldownRemaining.whale = Math.max(0, this.skillCooldownRemaining.whale - deltaTime);
+    this.updateSkillCooldownMasks();
     this.basicCooldownRemaining = Math.max(0, this.basicCooldownRemaining - deltaTime);
     this.updateFishAction(deltaTime);
     this.advanceRemoteSwimAnimations(deltaTime);
@@ -196,13 +216,14 @@ export class GameBootstrap extends Component {
       this.loadImage('art/ui/joystick-knob'),
       this.loadImage('art/ui/basic-attack'),
       this.loadImage('art/ui/skill-dash'),
+      this.loadImage('art/ui/skill-whale-swallow'),
       this.loadImage('art/ui/health-bar-frame'),
       this.loadImage('art/ui/health-bar-fill')
     ]);
     const fishImages = images.slice(0, 6);
     const biteImages = images.slice(6, 14);
     const hurtImages = images.slice(14, 22);
-    const [joystickBase, joystickKnob, basicAttack, skillDash, healthBarFrame, healthBarFill] = images.slice(22);
+    const [joystickBase, joystickKnob, basicAttack, skillDash, skillWhaleSwallow, healthBarFrame, healthBarFill] = images.slice(22);
 
     const background = new Node('OceanMap');
     background.layer = worldRoot.layer;
@@ -233,7 +254,7 @@ export class GameBootstrap extends Component {
     this.remotePlayers = new RemotePlayerRegistry((state) => this.createRemotePlayerView(playerLayer, state));
 
     this.createControlHint(this.hudRoot);
-    this.createCombatUi(this.hudRoot, joystickBase, joystickKnob, basicAttack, skillDash);
+    this.createCombatUi(this.hudRoot, joystickBase, joystickKnob, basicAttack, skillDash, skillWhaleSwallow);
   }
 
   private createRemotePlayerView(parent: Node, state: RemotePlayerState) {
@@ -247,22 +268,109 @@ export class GameBootstrap extends Component {
     parent.addChild(node);
     this.remoteSwimStates.set(sprite, { frameIndex: 0, elapsed: 0, active: true });
     let facingAngle = normalizeHorizontalFacingAngle(state.rotation);
+    let dead = state.dead;
     this.applyHorizontalFacing(node, facingAngle);
     this.createFishHealthDisplay(state.playerId, node, state.health, state.maxHealth);
     this.createFishNameDisplay(state.playerId, node, state.displayName);
-    return { setPosition: (x: number, y: number) => node.setPosition(x, y, 0), setRotation: (angle: number) => { facingAngle = normalizeHorizontalFacingAngle(angle); this.applyHorizontalFacing(node, facingAngle); }, setHealth: (health: number, maxHealth: number) => this.setFishHealth(state.playerId, health, maxHealth), playSkill: (skillId: string) => {
-      const duration = skillId === 'skill-dash-bite' ? 0.42 : 0.34;
-      const radians = facingAngle * Math.PI / 180;
-      if (skillId === 'skill-dash-bite') this.createDashEffect(node.position.x, node.position.y, facingAngle);
-      this.createBiteEffect(node.position.x + Math.cos(radians) * 76, node.position.y, facingAngle, skillId === 'skill-dash-bite' ? 96 : 72, skillId === 'skill-dash-bite' ? new Color(120, 230, 255, 235) : new Color(255, 236, 120, 235), duration);
-      this.playRemoteFishAnimation(sprite, this.biteFrames, duration);
-    }, playHurt: (skillId: string) => { const duration = skillId === 'skill-dash-bite' ? 0.42 : 0.34; this.playRemoteFishAnimation(sprite, this.hurtFrames, duration); }, playDeath: () => { this.remoteAnimationTokens.set(sprite, (this.remoteAnimationTokens.get(sprite) ?? 0) + 1); const swimState = this.remoteSwimStates.get(sprite); if (swimState) { swimState.active = false; swimState.elapsed = 0; } node.active = true; this.applyHorizontalFacing(node, facingAngle, 0.6); }, playRespawn: () => { this.stopRemoteFishAnimation(sprite); sprite.spriteFrame = this.swimFrames[0] ?? null; node.active = true; this.applyHorizontalFacing(node, facingAngle); }, destroy: () => { this.remoteSwimStates.delete(sprite); this.removeFishHealthDisplay(state.playerId); this.removeFishNameDisplay(state.playerId); node.destroy(); } };
+    return {
+      setPosition: (x: number, y: number) => node.setPosition(x, y, 0),
+      setRotation: (angle: number) => {
+        facingAngle = normalizeHorizontalFacingAngle(angle);
+        this.applyHorizontalFacing(node, facingAngle);
+      },
+      setHealth: (health: number, maxHealth: number) => this.setFishHealth(state.playerId, health, maxHealth),
+      playSkill: (skillId: SkillId, effectDurationMs?: number) => {
+        const actionDuration = skillId === 'skill-dash-bite' || skillId === 'skill-whale-swallow' ? 0.42 : 0.34;
+        const radians = facingAngle * Math.PI / 180;
+        if (skillId === 'skill-dash-bite') this.createDashEffect(node.position.x, node.position.y, facingAngle);
+        this.createBiteEffect(
+          node.position.x + Math.cos(radians) * 76,
+          node.position.y,
+          facingAngle,
+          skillId === 'skill-basic-bite' ? 72 : 96,
+          skillId === 'skill-basic-bite' ? new Color(255, 236, 120, 235) : new Color(120, 230, 255, 235),
+          actionDuration
+        );
+        this.playRemoteFishAnimation(sprite, this.biteFrames, actionDuration);
+        if (skillId === 'skill-whale-swallow') {
+          this.applyWhaleSourceVisual(
+            node,
+            sprite,
+            () => facingAngle,
+            effectDurationMs ?? GameBootstrap.WHALE_EFFECT_DURATION_MS,
+            () => dead ? 0.6 : 1
+          );
+        }
+      },
+      playWhaleTarget: (effectDurationMs?: number) => {
+        this.applyWhaleOpacity(sprite, effectDurationMs ?? GameBootstrap.WHALE_EFFECT_DURATION_MS);
+      },
+      playHurt: (skillId: string) => {
+        const duration = skillId === 'skill-dash-bite' ? 0.42 : 0.34;
+        this.playRemoteFishAnimation(sprite, this.hurtFrames, duration);
+      },
+      playDeath: () => {
+        dead = true;
+        this.remoteAnimationTokens.set(sprite, (this.remoteAnimationTokens.get(sprite) ?? 0) + 1);
+        const swimState = this.remoteSwimStates.get(sprite);
+        if (swimState) { swimState.active = false; swimState.elapsed = 0; }
+        node.active = true;
+        this.applyHorizontalFacing(node, facingAngle, 0.6);
+      },
+      playRespawn: () => {
+        dead = false;
+        this.stopRemoteFishAnimation(sprite);
+        sprite.spriteFrame = this.swimFrames[0] ?? null;
+        node.active = true;
+        this.applyHorizontalFacing(node, facingAngle);
+      },
+      destroy: () => {
+        this.remoteSwimStates.delete(sprite);
+        this.removeFishHealthDisplay(state.playerId);
+        this.removeFishNameDisplay(state.playerId);
+        node.destroy();
+      }
+    };
   }
 
-  private applyHorizontalFacing(node: Node, angle: HorizontalFacingAngle, scale = 1): void {
+  private applyHorizontalFacing(node: Node, angle: HorizontalFacingAngle, scale?: number): void {
+    const effectiveScale = scale ?? this.fishVisualScales.get(node) ?? 1;
     node.angle = 0;
     // 所有动画帧加载时已归一到配置的默认美术方向；这里只处理逻辑朝向。
-    node.setScale(horizontalScaleForFacing(angle, this.artFacingDirection, scale), scale, 1);
+    node.setScale(horizontalScaleForFacing(angle, this.artFacingDirection, effectiveScale), effectiveScale, 1);
+  }
+
+  private applyWhaleSourceVisual(
+    node: Node,
+    sprite: Sprite,
+    getFacingAngle: () => HorizontalFacingAngle,
+    durationMs: number,
+    getRestoreScale: () => number
+  ): void {
+    const durationSeconds = Math.max(0.05, durationMs / 1000);
+    const scaleToken = (this.whaleScaleTokens.get(node) ?? 0) + 1;
+    this.whaleScaleTokens.set(node, scaleToken);
+    this.fishVisualScales.set(node, 3);
+    this.applyHorizontalFacing(node, getFacingAngle());
+    this.applyWhaleOpacity(sprite, durationMs);
+    this.scheduleOnce(() => {
+      if (!node.isValid || this.whaleScaleTokens.get(node) !== scaleToken) return;
+      this.fishVisualScales.delete(node);
+      this.applyHorizontalFacing(node, getFacingAngle(), getRestoreScale());
+    }, durationSeconds);
+  }
+
+  private applyWhaleOpacity(sprite: Sprite, durationMs: number): void {
+    const durationSeconds = Math.max(0.05, durationMs / 1000);
+    const opacityToken = (this.whaleOpacityTokens.get(sprite) ?? 0) + 1;
+    this.whaleOpacityTokens.set(sprite, opacityToken);
+    const current = sprite.color;
+    sprite.color = new Color(current.r, current.g, current.b, 128);
+    this.scheduleOnce(() => {
+      if (!sprite.isValid || this.whaleOpacityTokens.get(sprite) !== opacityToken) return;
+      const color = sprite.color;
+      sprite.color = new Color(color.r, color.g, color.b, 255);
+    }, durationSeconds);
   }
 
   private playRemoteFishAnimation(sprite: Sprite, frames: SpriteFrame[], duration: number): void {
@@ -553,9 +661,12 @@ export class GameBootstrap extends Component {
       const self = snapshot.players.find((player) => player.playerId === this.networkPlayerId);
       if (self) this.setFishName('local-player', self.displayName);
       this.applyRemotePlayers(snapshot.players);
+      if (self) this.applyLocalSnapshotAction(self);
     } else if (message.type === 'stateSnapshot') {
       const snapshot = message.payload as { players: RemotePlayerState[] };
       this.applyRemotePlayers(snapshot.players);
+      const self = snapshot.players.find((player) => player.playerId === this.networkPlayerId);
+      if (self) this.applyLocalSnapshotAction(self);
     } else if (message.type === 'playerJoined') {
       const player = message.payload as RemotePlayerState;
       if (player.playerId !== this.networkPlayerId) this.remotePlayers?.upsert(player);
@@ -563,14 +674,20 @@ export class GameBootstrap extends Component {
       this.remotePlayers?.remove((message.payload as { playerId: string }).playerId);
     } else if (message.type === 'skillEffect') {
       const effect = message.payload as SkillEffect;
-      if (effect.playerId !== this.networkPlayerId) {
-        this.remotePlayers?.upsert({ playerId: effect.playerId, displayName: '远端玩家', x: effect.x, y: effect.y, rotation: effect.rotation, lastProcessedClientTick: effect.clientTick, health: 100, maxHealth: 100, level: 1, dead: false });
+      if (effect.skillId === 'skill-whale-swallow') this.handleWhaleSwallowEffect(effect);
+      else if (effect.playerId !== this.networkPlayerId) {
+        this.remotePlayers?.setTransform(effect.playerId, effect.x, effect.y, effect.rotation);
         this.remotePlayers?.playSkill(effect.playerId, effect.skillId, effect.actionSequence);
       }
     } else if (message.type === 'skillResolved') {
       const result = message.payload as SkillResolved;
       if (result.playerId === this.networkPlayerId && this.actionHint) {
-        if (!result.reason) this.actionHint.string = result.hitCount > 0 ? `命中 ${result.hitCount} 名玩家` : '未命中：靠近并面向对方后再撕咬';
+        if (result.skillId === 'skill-whale-swallow' && result.reason === 'noTarget') {
+          this.skillCooldownRemaining.whale = 0;
+          this.updateSkillCooldownMasks();
+          this.actionHint.string = '鲸吞范围内没有可用目标';
+        } else if (!result.reason && result.skillId === 'skill-whale-swallow') this.actionHint.string = '鲸吞已锁定目标，效果持续 3 秒';
+        else if (!result.reason) this.actionHint.string = result.hitCount > 0 ? `命中 ${result.hitCount} 名玩家` : '未命中：靠近并面向对方后再撕咬';
         else if (result.reason === 'cooldown') this.actionHint.string = '技能冷却中';
         else if (result.reason === 'dead') this.actionHint.string = '死亡期间不能攻击';
         else this.actionHint.string = '攻击输入已过期，请重新释放';
@@ -592,14 +709,99 @@ export class GameBootstrap extends Component {
       if (event.playerId === this.networkPlayerId) { this.localHealth = event.health; this.localMaxHealth = event.maxHealth; this.updateHealthHud(); this.actionHint && (this.actionHint.string = event.leveled ? `击败玩家，升级至 ${event.level} 级，生命上限 ${event.maxHealth}` : `击败玩家，获得经验，击杀 ${event.kills}`); }
     } else if (message.type === 'stateCorrection') {
       const state = message.payload as RemotePlayerState;
-      if (state.playerId === this.networkPlayerId) { this.localHealth = state.health; this.localMaxHealth = state.maxHealth; this.localDead = state.dead; this.updateHealthHud(); this.playerNode?.setPosition(state.x, state.y, 0); if (this.playerNode) { this.playerFacingAngle = normalizeHorizontalFacingAngle(state.rotation); this.applyHorizontalFacing(this.playerNode, this.playerFacingAngle, state.dead ? 0.6 : 1); this.playerNode.active = true; } }
+      if (state.playerId === this.networkPlayerId) {
+        this.localHealth = state.health;
+        this.localMaxHealth = state.maxHealth;
+        this.localDead = state.dead;
+        this.updateHealthHud();
+        this.playerNode?.setPosition(state.x, state.y, 0);
+        if (this.playerNode) {
+          this.playerFacingAngle = normalizeHorizontalFacingAngle(state.rotation);
+          this.applyHorizontalFacing(this.playerNode, this.playerFacingAngle, state.dead ? 0.6 : undefined);
+          this.playerNode.active = true;
+        }
+        this.applyLocalSnapshotAction(state);
+      }
     }
   }
 
   private applyRemotePlayers(players: RemotePlayerState[]): void {
     const seen = new Set<string>();
-    for (const player of players) if (player.playerId !== this.networkPlayerId) { seen.add(player.playerId); this.remotePlayers?.upsert(player); }
+    for (const player of players) {
+      if (player.playerId === this.networkPlayerId) continue;
+      seen.add(player.playerId);
+      const targetsLocalPlayer = player.action === 'skill-whale-swallow' && player.actionTargetId === this.networkPlayerId;
+      this.remotePlayers?.upsert(targetsLocalPlayer ? { ...player, actionTargetId: undefined } : player);
+      if (
+        targetsLocalPlayer
+        && player.actionSequence !== undefined
+        && player.actionSequence > (this.localWhaleTargetSequences.get(player.playerId) ?? 0)
+      ) {
+        this.localWhaleTargetSequences.set(player.playerId, player.actionSequence);
+        if (this.playerSprite) this.applyWhaleOpacity(this.playerSprite, player.actionRemainingMs ?? GameBootstrap.WHALE_EFFECT_DURATION_MS);
+      }
+    }
     for (const id of this.remotePlayers?.ids() ?? []) if (!seen.has(id)) this.remotePlayers?.remove(id);
+  }
+
+  private handleWhaleSwallowEffect(effect: SkillEffect): void {
+    const durationMs = effect.effectDurationMs ?? GameBootstrap.WHALE_EFFECT_DURATION_MS;
+    if (effect.playerId === this.networkPlayerId) {
+      if (effect.actionSequence <= this.localActionSequence) return;
+      this.localActionSequence = effect.actionSequence;
+      this.playerNode?.setPosition(effect.x, effect.y, 0);
+      this.startFishAction('dashBite', 0.42);
+      if (this.playerNode && this.playerSprite) {
+        this.applyWhaleSourceVisual(
+          this.playerNode,
+          this.playerSprite,
+          () => this.playerFacingAngle,
+          durationMs,
+          () => this.localDead ? 0.6 : 1
+        );
+      }
+      if (effect.targetId && effect.targetId !== this.networkPlayerId) this.remotePlayers?.playWhaleTarget(effect.targetId, durationMs);
+      return;
+    }
+
+    this.remotePlayers?.setTransform(effect.playerId, effect.x, effect.y, effect.rotation);
+    this.remotePlayers?.playSkill(
+      effect.playerId,
+      effect.skillId,
+      effect.actionSequence,
+      effect.targetId === this.networkPlayerId ? undefined : effect.targetId,
+      durationMs
+    );
+    if (
+      effect.targetId === this.networkPlayerId
+      && effect.actionSequence > (this.localWhaleTargetSequences.get(effect.playerId) ?? 0)
+    ) {
+      this.localWhaleTargetSequences.set(effect.playerId, effect.actionSequence);
+      if (this.playerSprite) this.applyWhaleOpacity(this.playerSprite, durationMs);
+    }
+  }
+
+  private applyLocalSnapshotAction(state: RemotePlayerState): void {
+    if (
+      state.action !== 'skill-whale-swallow'
+      || state.actionSequence === undefined
+      || state.actionSequence <= this.localActionSequence
+    ) return;
+    this.localActionSequence = state.actionSequence;
+    const durationMs = state.actionRemainingMs ?? GameBootstrap.WHALE_EFFECT_DURATION_MS;
+    this.startFishAction('dashBite', 0.42);
+    if (this.playerNode && this.playerSprite) {
+      this.applyWhaleSourceVisual(
+        this.playerNode,
+        this.playerSprite,
+        () => this.playerFacingAngle,
+        durationMs,
+        () => this.localDead ? 0.6 : 1
+      );
+    }
+    if (state.actionTargetId && state.actionTargetId !== this.networkPlayerId) {
+      this.remotePlayers?.playWhaleTarget(state.actionTargetId, durationMs);
+    }
   }
 
   private createControlHint(hudRoot: Node): void {
@@ -621,7 +823,7 @@ export class GameBootstrap extends Component {
 
   private updateHealthHud(): void { if (this.healthLabel) this.healthLabel.string = `生命 ${Math.max(0, Math.ceil(this.localHealth))}/${this.localMaxHealth}`; this.setFishHealth('local-player', this.localHealth, this.localMaxHealth); }
 
-  private createCombatUi(hudRoot: Node, base: ImageAsset, knob: ImageAsset, basic: ImageAsset, skill: ImageAsset): void {
+  private createCombatUi(hudRoot: Node, base: ImageAsset, knob: ImageAsset, basic: ImageAsset, skill: ImageAsset, whaleSkill: ImageAsset): void {
     const inputLayer = hudRoot.getChildByName('SafeAreaRoot')?.getChildByName('InputLayer') ?? hudRoot;
     // 先对齐整体容器，再处理容器内部节点，避免显示坐标和触摸坐标分裂。
     const joystick = this.createUiSprite(inputLayer, 'JoystickControlRoot', base, 220, 220, 0, 0);
@@ -629,12 +831,28 @@ export class GameBootstrap extends Component {
     joystick.getComponent(UITransform)?.setAnchorPoint(0, 0);
     this.alignContainerToScreen(joystick, { left: 60, bottom: 35 });
     this.joystickKnob = this.createUiSprite(joystick, 'JoystickKnob', knob, 120, 120, 110, 110);
-    const actionRoot = this.createUiContainer(inputLayer, 'ActionControlsRoot', 360, 190);
-    this.alignContainerToScreen(actionRoot, { right: 30, bottom: 30 });
-    const attackButton = this.createUiSprite(actionRoot, 'BasicAttackButton', basic, 132, 132, 88, 72);
-    const skillButton = this.createUiSprite(actionRoot, 'SkillDashButton', skill, 148, 148, 270, 92);
-    this.createButtonLabel(attackButton, '普通攻击');
-    this.createButtonLabel(skillButton, '技能');
+    const actionRoot = this.createUiContainer(
+      inputLayer,
+      'ActionControlsRoot',
+      GameBootstrap.ACTION_CONTROLS_WIDTH,
+      GameBootstrap.ACTION_CONTROLS_HEIGHT
+    );
+    this.alignContainerToScreen(actionRoot, { right: 24, bottom: 20 });
+    const attackCenter = GameBootstrap.BASIC_ATTACK_CENTER;
+    const attackButton = this.createUiSprite(actionRoot, 'BasicAttackButton', basic, 132, 132, attackCenter.x, attackCenter.y);
+    this.createButtonLabel(attackButton, '普攻');
+    const skillButtons = [
+      { name: 'SkillDashButton', label: '冲刺', image: skill, cooldownKey: 'dash' as const, action: () => this.triggerDashBite() },
+      { name: 'SkillWhaleSwallowButton', label: '鲸吞', image: whaleSkill, cooldownKey: 'whale' as const, action: () => this.triggerWhaleSwallow() },
+      { name: 'SkillPlaceholderButton3', label: '技能3', image: skill, cooldownKey: 'dash' as const, action: () => this.triggerDashBite() },
+      { name: 'SkillPlaceholderButton4', label: '技能4', image: skill, cooldownKey: 'dash' as const, action: () => this.triggerDashBite() }
+    ].map((definition, slotIndex) => {
+      const position = this.getSkillArcPosition(slotIndex);
+      const button = this.createUiSprite(actionRoot, definition.name, definition.image, 104, 104, position.x, position.y);
+      this.createSkillCooldownMask(button, definition.cooldownKey);
+      this.createButtonLabel(button, definition.label);
+      return { button, action: definition.action };
+    });
     joystick.on(Node.EventType.TOUCH_START, this.onJoystickTouchStart, this);
     joystick.on(Node.EventType.TOUCH_MOVE, this.onJoystickTouchMove, this);
     joystick.on(Node.EventType.TOUCH_END, this.onJoystickTouchEnd, this);
@@ -642,9 +860,16 @@ export class GameBootstrap extends Component {
     this.bindActionButton(attackButton, () => {
       this.triggerBasicBite();
     });
-    this.bindActionButton(skillButton, () => {
-      this.triggerDashBite();
-    });
+    for (const { button, action } of skillButtons) this.bindActionButton(button, action);
+  }
+
+  private getSkillArcPosition(slotIndex: number): Vec2 {
+    const angle = GameBootstrap.SKILL_ARC_ANGLES[Math.min(slotIndex, GameBootstrap.SKILL_ARC_ANGLES.length - 1)];
+    const radians = angle * Math.PI / 180;
+    return new Vec2(
+      GameBootstrap.BASIC_ATTACK_CENTER.x + Math.cos(radians) * GameBootstrap.SKILL_ARC_RADIUS,
+      GameBootstrap.BASIC_ATTACK_CENTER.y + Math.sin(radians) * GameBootstrap.SKILL_ARC_RADIUS
+    );
   }
 
   private triggerBasicBite(): void {
@@ -660,8 +885,9 @@ export class GameBootstrap extends Component {
   }
 
   private triggerDashBite(): void {
-    if (!this.playerNode || this.skillCooldownRemaining > 0) return;
-    this.skillCooldownRemaining = 5;
+    if (!this.playerNode || this.skillCooldownRemaining.dash > 0) return;
+    this.skillCooldownRemaining.dash = GameBootstrap.DASH_SKILL_COOLDOWN_SECONDS;
+    this.updateSkillCooldownMasks();
     this.startFishAction('dashBite', 0.42);
     this.sendSkillEvent('skill-dash-bite');
     const angle = this.playerFacingAngle * Math.PI / 180;
@@ -677,7 +903,59 @@ export class GameBootstrap extends Component {
     this.actionHint && (this.actionHint.string = '冲刺撕咬：突进 240，冷却 5 秒');
   }
 
-  private sendSkillEvent(skillId: 'skill-basic-bite' | 'skill-dash-bite'): void {
+  private triggerWhaleSwallow(): void {
+    if (!this.playerNode || this.localDead || this.skillCooldownRemaining.whale > 0) return;
+    if (this.offlineModeSelected) {
+      this.actionHint && (this.actionHint.string = '鲸吞需要连接多人房间并锁定其它玩家');
+      return;
+    }
+    this.skillCooldownRemaining.whale = GameBootstrap.WHALE_SKILL_COOLDOWN_SECONDS;
+    this.updateSkillCooldownMasks();
+    this.startFishAction('dashBite', 0.42);
+    this.sendSkillEvent('skill-whale-swallow');
+    this.actionHint && (this.actionHint.string = '鲸吞：正在搜索 800 范围内最近目标');
+  }
+
+  private createSkillCooldownMask(parent: Node, key: SkillCooldownKey): void {
+    const parentTransform = parent.getComponent(UITransform);
+    const parentSprite = parent.getComponent(Sprite);
+    if (!parentTransform || !parentSprite?.spriteFrame) return;
+    const maskNode = new Node(`${parent.name}CooldownMask`);
+    maskNode.layer = parent.layer;
+    const transform = maskNode.addComponent(UITransform);
+    transform.setContentSize(parentTransform.width, parentTransform.height);
+    transform.setAnchorPoint(0.5, 0.5);
+    const mask = maskNode.addComponent(Sprite);
+    mask.sizeMode = Sprite.SizeMode.CUSTOM;
+    mask.spriteFrame = parentSprite.spriteFrame;
+    mask.type = Sprite.Type.FILLED;
+    mask.fillType = Sprite.FillType.RADIAL;
+    mask.fillCenter = new Vec2(0.5, 0.5);
+    mask.fillStart = GameBootstrap.SKILL_COOLDOWN_START;
+    mask.fillRange = 0;
+    mask.color = new Color(0, 0, 0, 160);
+    parent.addChild(maskNode);
+    maskNode.setPosition(0, 0, 0);
+    maskNode.active = false;
+    this.skillCooldownMasks.push({ sprite: mask, key });
+  }
+
+  private updateSkillCooldownMasks(): void {
+    for (const { sprite: mask, key } of this.skillCooldownMasks) {
+      const cooldownSeconds = key === 'whale'
+        ? GameBootstrap.WHALE_SKILL_COOLDOWN_SECONDS
+        : GameBootstrap.DASH_SKILL_COOLDOWN_SECONDS;
+      const remainingRatio = Math.min(1, Math.max(0, this.skillCooldownRemaining[key] / cooldownSeconds));
+      const elapsedRatio = 1 - remainingRatio;
+      const clockwiseStart = (GameBootstrap.SKILL_COOLDOWN_START - elapsedRatio + 1) % 1;
+      const active = remainingRatio > 0;
+      mask.node.active = active;
+      mask.fillStart = active ? clockwiseStart : GameBootstrap.SKILL_COOLDOWN_START;
+      mask.fillRange = active ? -remainingRatio : 0;
+    }
+  }
+
+  private sendSkillEvent(skillId: SkillId): void {
     if (!this.playerNode) return;
     const position = this.playerNode.position;
     // 服务端只信任它保存的朝向。技能前先发送当前朝向，确保快速转向后立即撕咬不会按旧朝向判定。
@@ -766,16 +1044,25 @@ export class GameBootstrap extends Component {
   }
 
   private createButtonLabel(parent: Node, text: string): void {
+    const parentTransform = parent.getComponent(UITransform);
+    if (!parentTransform) return;
     const labelNode = new Node(`${parent.name}Label`);
+    labelNode.layer = parent.layer;
     const transform = labelNode.addComponent(UITransform);
-    transform.setContentSize(120, 28);
+    transform.setContentSize(Math.max(72, parentTransform.width - 12), 28);
+    transform.setAnchorPoint(0.5, 0);
     const label = labelNode.addComponent(Label);
     label.string = text;
-    label.fontSize = 20;
-    label.lineHeight = 24;
-    label.color = new Color(255, 255, 255, 245);
+    label.fontSize = 17;
+    label.lineHeight = 22;
+    label.horizontalAlign = Label.HorizontalAlign.CENTER;
+    label.verticalAlign = Label.VerticalAlign.BOTTOM;
+    label.color = new Color(255, 255, 255, 255);
+    const outline = labelNode.addComponent(LabelOutline);
+    outline.color = new Color(8, 35, 58, 255);
+    outline.width = 2;
     parent.addChild(labelNode);
-    labelNode.setPosition(0, -parent.getComponent(UITransform)!.height / 2 - 18, 0);
+    labelNode.setPosition(0, -parentTransform.height / 2, 0);
   }
 
   private alignContainerToScreen(node: Node, edges: { left?: number; right?: number; bottom: number }): void {

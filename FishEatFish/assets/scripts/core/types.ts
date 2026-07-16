@@ -29,11 +29,14 @@ export interface SkillConfig {
   schemaVersion: 2;
   id: string;
   displayName: string;
-  animationState: 'bite' | 'dashBite';
+  animationState: 'bite' | 'dashBite' | 'whaleSwallow';
   damage: number;
   range: number;
   cooldownSeconds: number;
   dashDistance: number;
+  effectDurationSeconds?: number;
+  scaleMultiplier?: number;
+  opacity?: number;
 }
 
 export interface WorldConfig {

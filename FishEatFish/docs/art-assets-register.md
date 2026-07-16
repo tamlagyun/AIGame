@@ -27,3 +27,5 @@
 | 冲刺撕咬按钮 | `art-output/ART-PROMPT-UI-0004-v1/jimeng_1783937050_1.png` | 色键去背、去溢色、按 Alpha 包围盒裁边并居中 | `assets/resources/art/ui/skill-dash.png` | 已确认并调用 |
 | 鱼儿生命条边框与空槽 | `art-output/ART-PROMPT-UI-0005-v1/jimeng_1784108681_1.png` | 绿色背景色键去背、柔化透明边缘、去溢色、裁取完整横向边框和空槽为 876×310 透明 PNG | `assets/resources/art/ui/health-bar-frame.png` | 用户已确认提示词；工程内即梦 API 生成；已建立独立 `.meta`，待编辑器刷新复核 |
 | 鱼儿动态生命填充条 | `art-output/ART-PROMPT-UI-0006-v1/jimeng_1784108702_1.png` | 洋红背景色键去背、柔化透明边缘、去溢色、从生成图额外外框内裁取彩色胶囊主体为 820×190 透明 PNG | `assets/resources/art/ui/health-bar-fill.png` | 用户已确认提示词；工程内即梦 API 生成；已建立独立 `.meta`，待编辑器刷新复核 |
+| 鲸吞技能按钮图标（临时选用） | `art-output/ART-PROMPT-UI-0007-v1/jimeng_1784198647_1.png` | 绿色背景强色键去背、边缘去溢绿、轻微柔化、按 Alpha 包围盒裁边后居中输出为 1024×1024 透明 PNG | `assets/resources/art/ui/skill-whale-swallow.png` | `ART-PROMPT-UI-0007 v1`；用户于 2026-07-16 明确指定暂用。图中牙齿与原提示词排除项冲突，待后续 v2 替换；已建立独立 `.meta` |
+| 鲸吞技能按钮图标 | 待生成 | 计划：绿色背景色键去背、柔化透明边缘、去溢色、按 Alpha 包围盒裁边并居中 | `assets/resources/art/ui/skill-whale-swallow.png` | `ART-PROMPT-UI-0007 v2` 待用户确认 |
