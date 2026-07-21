@@ -13,6 +13,8 @@ export class Player {
   private visualRollAngleX = 0;
   private visualRollToken = 0;
   private visualRollTimer?: ReturnType<typeof setInterval>;
+  private knockbackToken = 0;
+  private knockbackTimer?: ReturnType<typeof setInterval>;
 
   public constructor(
     public readonly id: string,
@@ -100,5 +102,37 @@ export class Player {
     this.visualRollAngleX = 0;
     this.node.setRotationFromEuler(0, 0, 0);
     this.visualNode.setRotationFromEuler(0, 0, 0);
+  }
+
+  /** Keeps the root at the authoritative destination while the visual fish follows a short airborne arc. */
+  public playKnockback(targetX: number, targetY: number, durationSeconds: number): void {
+    if (this.knockbackTimer) clearInterval(this.knockbackTimer);
+    const token = ++this.knockbackToken;
+    const startX = this.node.position.x;
+    const startY = this.node.position.y;
+    this.node.setPosition(targetX, targetY, 0);
+    const offsetX = startX - targetX;
+    const offsetY = startY - targetY;
+    const duration = Math.max(0.12, durationSeconds);
+    const startedAt = Date.now();
+    const tick = () => {
+      if (!this.node.isValid || !this.visualNode.isValid || token !== this.knockbackToken) {
+        if (this.knockbackTimer) clearInterval(this.knockbackTimer);
+        return;
+      }
+      const progress = Math.min(1, (Date.now() - startedAt) / (duration * 1000));
+      const lift = Math.sin(progress * Math.PI) * 72;
+      this.visualNode.setPosition(offsetX * (1 - progress), offsetY * (1 - progress) + lift, 0);
+      const baseScale = this.dead ? 0.6 : this.visualScale;
+      this.setFacing(this.facingAngle, baseScale * (1 + Math.sin(progress * Math.PI) * 0.3));
+      if (progress >= 1) {
+        if (this.knockbackTimer) clearInterval(this.knockbackTimer);
+        this.knockbackTimer = undefined;
+        this.visualNode.setPosition(0, 0, 0);
+        this.setFacing(this.facingAngle, this.dead ? 0.6 : this.visualScale);
+      }
+    };
+    this.knockbackTimer = setInterval(tick, 16);
+    tick();
   }
 }

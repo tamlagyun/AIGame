@@ -97,3 +97,44 @@ test('ink splash locks its release center and damages every player in the 10 met
   assert.equal(outside.combat.health, 100);
   assert.equal(events.filter((event) => event.type === 'hitConfirmed').length, 1);
 });
+
+test('orca charge locks the nearest forward target, deals severe damage and applies bounded knockback', () => {
+  const combat = new CombatService();
+  const attacker = player('a', 0, 0);
+  const target = player('b', 500, 0);
+  const behind = player('c', -200, 0);
+  const result = combat.useSkill(
+    attacker,
+    'skill-orca-charge',
+    1,
+    [attacker, target, behind],
+    0,
+    1,
+    undefined,
+    (x, y) => { attacker.x = x; attacker.y = y; },
+    (knockedTarget, x, y) => {
+      const bounded = { x: Math.min(700, x), y };
+      knockedTarget.x = bounded.x;
+      knockedTarget.y = bounded.y;
+      return bounded;
+    }
+  );
+  assert.equal(result.accepted, true);
+  assert.equal(result.targetId, target.playerId);
+  assert.equal(attacker.x, 404);
+  assert.equal(target.x, 700);
+  assert.equal(result.targetX, 700);
+  assert.equal(target.combat.health, 40);
+  assert.equal(behind.combat.health, 100);
+  assert.equal(result.events.some((event) => event.type === 'playerDamaged' && event.payload.damage === 60), true);
+});
+
+test('orca charge without a forward target does not consume cooldown', () => {
+  const combat = new CombatService();
+  const attacker = player('a', 0, 0);
+  const behind = player('b', -100, 0);
+  const result = combat.useSkill(attacker, 'skill-orca-charge', 1, [attacker, behind], 0, 1);
+  assert.equal(result.accepted, false);
+  assert.equal(result.reason, 'noTarget');
+  assert.equal(attacker.combat.skillCooldowns['skill-orca-charge'], undefined);
+});

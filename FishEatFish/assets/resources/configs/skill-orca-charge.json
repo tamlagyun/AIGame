@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "id": "skill-orca-charge",
+  "displayName": "虎鲸冲刺",
+  "networkSkillId": "skill-orca-charge",
+  "animationState": "orcaCharge",
+  "damage": 60,
+  "range": 900,
+  "cooldownSeconds": 12,
+  "dashDistance": 0,
+  "knockbackDistance": 360,
+  "targetStopDistance": 96,
+  "ui": {
+    "nodeName": "SkillOrcaChargeButton",
+    "slot": "arc",
+    "slotIndex": 4,
+    "iconPath": "art/ui/skill-orca-charge",
+    "cooldownGroup": "orca-charge"
+  },
+  "clientEffect": {
+    "kind": "orcaCharge",
+    "animationDurationSeconds": 0.65,
+    "visualOffset": 96,
+    "visualRadius": 150,
+    "visualDurationSeconds": 0.38,
+    "visualColor": { "r": 80, "g": 210, "b": 255, "a": 245 },
+    "hint": "虎鲸冲刺：锁定前方目标，造成 60 点伤害并顶飞"
+  }
+}

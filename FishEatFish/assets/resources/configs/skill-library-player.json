@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "id": "player-skill-library",
+  "skillConfigPaths": [
+    "configs/skill-basic-bite",
+    "configs/skill-dash-bite",
+    "configs/skill-whale-swallow",
+    "configs/skill-placeholder-3",
+    "configs/skill-placeholder-4",
+    "configs/skill-orca-charge"
+  ]
+}

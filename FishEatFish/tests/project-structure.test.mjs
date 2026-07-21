@@ -65,7 +65,7 @@ test('鲸吞按钮加载独立正式位图而不改变既有技能区布局', ()
   const whale = readFileSync(fromRoot('assets/resources/configs/skill-whale-swallow.json'), 'utf8');
   const mainUi = readFileSync(fromRoot('assets/scripts/cocos/MainUIManager.ts'), 'utf8');
   assert.match(source, /new MainUIManager\(/);
-  assert.match(mainUi, /new SkillActionPanel\(this\.inputLayer, options\.skillLoadout, options\.skills, options\.skillImages/);
+  assert.match(mainUi, /new SkillActionPanel\([\s\S]*this\.inputLayer,[\s\S]*options\.skillLoadout/);
   assert.match(loadout, /"configs\/skill-whale-swallow"/);
   assert.match(whale, /"iconPath": "art\/ui\/skill-whale-swallow"/);
   assert.match(whale, /"slotIndex": 1/);
@@ -95,7 +95,46 @@ test('MainUIManager owns fixed large-world HUD node creation', () => {
   assert.match(mainUi, /getChildByName\('SafeAreaRoot'\)\?\.getChildByName\('InputLayer'\)/);
   assert.match(mainUi, /createContainer\(this\.inputLayer, 'FishHealthOverlay', 1280, 720, 0\.5, 0\.5\)/);
   assert.match(mainUi, /this\.alignToBottomLeft\(this\.joystickRoot, 60, 35\)/);
-  assert.match(mainUi, /new SkillActionPanel\(this\.inputLayer/);
+  assert.match(mainUi, /new SkillActionPanel\([\s\S]*this\.inputLayer/);
+});
+
+test('右上技能入口打开技能配置界面并通过技能库替换四个槽位', () => {
+  const bootstrap = readFileSync(fromRoot('assets/scripts/cocos/GameBootstrap.ts'), 'utf8');
+  const mainUi = readFileSync(fromRoot('assets/scripts/cocos/MainUIManager.ts'), 'utf8');
+  const dialog = readFileSync(fromRoot('assets/scripts/cocos/SkillLoadoutDialog.ts'), 'utf8');
+  const panel = readFileSync(fromRoot('assets/scripts/cocos/SkillActionPanel.ts'), 'utf8');
+  const store = readFileSync(fromRoot('assets/scripts/data/SkillLoadoutStore.ts'), 'utf8');
+  const library = JSON.parse(readFileSync(fromRoot('assets/resources/configs/skill-library-player.json'), 'utf8'));
+  assert.match(bootstrap, /loadJson\('configs\/skill-library-player'\)/);
+  assert.match(bootstrap, /loadImage\('art\/ui\/skill-loadout-entry'\)/);
+  assert.match(mainUi, /new SkillLoadoutStore\(options\.allSkills, options\.skills\)/);
+  assert.match(mainUi, /new SkillLoadoutDialog\(/);
+  assert.match(dialog, /'SkillLoadoutEntryRoot'/);
+  assert.match(dialog, /widget\.isAlignRight = true/);
+  assert.match(dialog, /widget\.isAlignTop = true/);
+  assert.match(dialog, /'SkillLoadoutDialog'/);
+  assert.match(dialog, /当前没有未装备技能/);
+  assert.match(panel, /public replaceArcSkill\(slotIndex: number, skill: SkillConfig\)/);
+  assert.match(store, /fish-eat-fish\.skill-loadout\.v1/);
+  assert.equal(library.schemaVersion, 2);
+  assert.equal(library.skillConfigPaths.length, 6);
+  assert.ok(library.skillConfigPaths.includes('configs/skill-orca-charge'));
+});
+
+test('虎鲸冲刺只进入技能库并由服务器权威处理伤害和顶飞', () => {
+  const loadout = readFileSync(fromRoot('assets/resources/configs/skill-loadout-player.json'), 'utf8');
+  const library = readFileSync(fromRoot('assets/resources/configs/skill-library-player.json'), 'utf8');
+  const skill = readFileSync(fromRoot('assets/resources/configs/skill-orca-charge.json'), 'utf8');
+  const combat = readFileSync(fromRoot('server/src/combat/combat-service.ts'), 'utf8');
+  const room = readFileSync(fromRoot('server/src/room/room.ts'), 'utf8');
+  const player = readFileSync(fromRoot('assets/scripts/cocos/Player.ts'), 'utf8');
+  assert.doesNotMatch(loadout, /skill-orca-charge/);
+  assert.match(library, /configs\/skill-orca-charge/);
+  assert.match(skill, /"damage": 60/);
+  assert.match(skill, /"knockbackDistance": 360/);
+  assert.match(combat, /skillId === 'skill-orca-charge'/);
+  assert.match(room, /targetX: result\.targetX/);
+  assert.match(player, /public playKnockback\(targetX: number, targetY: number/);
 });
 
 test('技能 3 使用独立死亡翻滚配置和网络 ID', () => {
@@ -230,7 +269,7 @@ test('技能区域以普攻为圆心并从左向上形成扇形槽位', () => {
   assert.equal(loadout.layout.height, 340);
   assert.equal(loadout.layout.right, 24);
   assert.equal(loadout.layout.bottom, 20);
-  assert.match(panel, /this\.alignToBottomRight\(root, layout\.right, layout\.bottom\)/);
+  assert.match(panel, /this\.alignToBottomRight\(this\.root, layout\.right, layout\.bottom\)/);
   assert.match(panel, /layout\.primaryCenter\.x \+ Math\.cos\(radians\) \* layout\.arcRadius/);
   assert.match(panel, /const size = skill\.ui\.slot === 'primary' \? layout\.primaryButtonSize : layout\.arcButtonSize/);
 });

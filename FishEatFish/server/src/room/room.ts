@@ -8,7 +8,7 @@ import type { InputPayload, SkillPayload } from '../protocol/client-messages.js'
 import type { PlayerSession } from './player-session.js';
 import { createCombatState } from '../combat/combat-state.js';
 import { CombatService } from '../combat/combat-service.js';
-import { DEATH_ROLL_DURATION_MS, INK_SPLASH_DURATION_MS, WHALE_SWALLOW_DURATION_MS } from '../combat/combat-config.js';
+import { DEATH_ROLL_DURATION_MS, INK_SPLASH_DURATION_MS, ORCA_CHARGE_DURATION_MS, WHALE_SWALLOW_DURATION_MS } from '../combat/combat-config.js';
 import { clampPosition } from '../simulation/bounds-system.js';
 
 export class Room {
@@ -58,16 +58,26 @@ export class Room {
       });
       source.x = next.x;
       source.y = next.y;
+    }, (target, x, y) => {
+      const next = clampPosition(x, y, {
+        minX: -this.config.mapWidth / 2,
+        maxX: this.config.mapWidth / 2,
+        minY: -this.config.mapHeight / 2,
+        maxY: this.config.mapHeight / 2
+      });
+      target.x = next.x;
+      target.y = next.y;
+      return next;
     });
     if (result.accepted) {
       source.actionSequence += 1;
       source.activeAction = skill.skillId;
       source.activeTargetId = result.targetId;
-      const effectDurationMs = skill.skillId === 'skill-whale-swallow'
-        ? WHALE_SWALLOW_DURATION_MS
+      const effectDurationMs = skill.skillId === 'skill-whale-swallow' ? WHALE_SWALLOW_DURATION_MS
         : skill.skillId === 'skill-death-roll' ? DEATH_ROLL_DURATION_MS
           : skill.skillId === 'skill-ink-splash' ? INK_SPLASH_DURATION_MS
-          : skill.skillId === 'skill-dash-bite' ? 420 : 340;
+            : skill.skillId === 'skill-orca-charge' ? ORCA_CHARGE_DURATION_MS
+              : skill.skillId === 'skill-dash-bite' ? 420 : 340;
       source.actionUntil = now + effectDurationMs;
       this.broadcast(message('skillEffect', {
         playerId,
@@ -78,6 +88,8 @@ export class Room {
         y: source.y,
         rotation: source.rotation,
         ...(result.targetId ? { targetId: result.targetId } : {}),
+        ...(result.targetX !== undefined ? { targetX: result.targetX } : {}),
+        ...(result.targetY !== undefined ? { targetY: result.targetY } : {}),
         effectDurationMs,
         serverTick: this.tickCount
       }));

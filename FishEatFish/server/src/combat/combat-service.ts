@@ -6,7 +6,7 @@ import { invulnerableUntil, respawnAt } from './respawn-policy.js';
 export interface CombatPlayer { playerId: string; x: number; y: number; rotation: number; combat: CombatState; radius?: number; }
 export interface CombatEvent { type: 'hitConfirmed' | 'playerDamaged' | 'playerDied' | 'combatSettlement' | 'playerRespawned'; payload: Record<string, unknown>; }
 export type SkillRejectReason = 'dead' | 'staleInput' | 'cooldown' | 'noTarget';
-export interface SkillUseResult { accepted: boolean; hitCount: number; targetId?: string; reason?: SkillRejectReason; events: CombatEvent[]; }
+export interface SkillUseResult { accepted: boolean; hitCount: number; targetId?: string; targetX?: number; targetY?: number; reason?: SkillRejectReason; events: CombatEvent[]; }
 export class CombatService {
   useSkill(
     source: CombatPlayer,
@@ -16,7 +16,8 @@ export class CombatService {
     now: number,
     serverTick: number,
     applyDash?: (distance: number) => void,
-    applyTeleport?: (x: number, y: number) => void
+    applyTeleport?: (x: number, y: number) => void,
+    applyKnockback?: (target: CombatPlayer, x: number, y: number) => { x: number; y: number }
   ): SkillUseResult {
     const config = combatSkills[skillId];
     if (source.combat.dead) return { accepted: false, hitCount: 0, reason: 'dead', events: [] };
@@ -58,6 +59,48 @@ export class CombatService {
       source.combat.lastSkillTick = clientTick;
       source.combat.skillCooldowns[skillId] = now + config.cooldownSeconds * 1000;
       return { accepted: true, hitCount: 0, events: [] };
+    }
+
+    if (skillId === 'skill-orca-charge') {
+      const target = players
+        .filter((candidate) =>
+          candidate.playerId !== source.playerId
+          && !candidate.combat.dead
+          && (candidate.combat.invulnerableUntil ?? 0) <= now
+          && isWithinAttackCone(source, candidate, config.range, config.angleRadians, source.radius ?? PLAYER_HIT_RADIUS)
+        )
+        .map((candidate) => ({ candidate, distanceSquared: (candidate.x - source.x) ** 2 + (candidate.y - source.y) ** 2 }))
+        .sort((left, right) => left.distanceSquared - right.distanceSquared)[0]?.candidate;
+      if (!target) return { accepted: false, hitCount: 0, reason: 'noTarget', events: [] };
+
+      source.combat.lastSkillTick = clientTick;
+      source.combat.skillCooldowns[skillId] = now + config.cooldownSeconds * 1000;
+      const radians = source.rotation * Math.PI / 180;
+      const directionX = Math.cos(radians);
+      const directionY = Math.sin(radians);
+      const stopDistance = config.targetStopDistance ?? 96;
+      const sourceX = target.x - directionX * stopDistance;
+      const sourceY = target.y - directionY * stopDistance;
+      if (applyTeleport) applyTeleport(sourceX, sourceY);
+      else { source.x = sourceX; source.y = sourceY; }
+      const desiredTargetX = target.x + directionX * (config.knockbackDistance ?? 360);
+      const desiredTargetY = target.y + directionY * (config.knockbackDistance ?? 360);
+      const knocked = applyKnockback?.(target, desiredTargetX, desiredTargetY) ?? { x: desiredTargetX, y: desiredTargetY };
+      target.x = knocked.x;
+      target.y = knocked.y;
+
+      const events: CombatEvent[] = [{ type: 'hitConfirmed', payload: { attackerId: source.playerId, targetId: target.playerId, skillId, serverTick } }];
+      target.combat.health = Math.max(0, target.combat.health - config.damage);
+      events.push({ type: 'playerDamaged', payload: { attackerId: source.playerId, targetId: target.playerId, skillId, damage: config.damage, health: target.combat.health, maxHealth: target.combat.maxHealth, serverTick } });
+      if (target.combat.health <= 0) {
+        target.combat.dead = true;
+        target.combat.respawnAt = respawnAt(now);
+        source.combat.kills += 1;
+        const leveled = addExperience(source.combat);
+        events.push({ type: 'playerDied', payload: { attackerId: source.playerId, targetId: target.playerId, respawnAt: target.combat.respawnAt, serverTick } });
+        events.push({ type: 'combatSettlement', payload: { playerId: source.playerId, kills: source.combat.kills, experience: source.combat.experience, level: source.combat.level, maxHealth: source.combat.maxHealth, health: source.combat.health, leveled, serverTick } });
+      }
+      return { accepted: true, hitCount: 1, targetId: target.playerId, targetX: target.x, targetY: target.y, events };
     }
 
     source.combat.lastSkillTick = clientTick;

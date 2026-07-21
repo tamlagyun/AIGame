@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "id": "skill-dash-bite",
-  "displayName": "冲刺撕咬",
+  "displayName": "鲫鱼抢食",
   "networkSkillId": "skill-dash-bite",
   "animationState": "dashBite",
   "damage": 30,
@@ -22,6 +22,6 @@
     "visualRadius": 96,
     "visualDurationSeconds": 0.22,
     "visualColor": { "r": 120, "g": 230, "b": 255, "a": 235 },
-    "hint": "冲刺撕咬：突进 240，冷却 5 秒"
+    "hint": "鲫鱼抢食：突进 240，冷却 5 秒"
   }
 }

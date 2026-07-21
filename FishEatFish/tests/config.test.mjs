@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseFishConfig, parseSkillConfig, parseSkillLoadoutConfig, parseWorldConfig } from '../assets/scripts/data/ConfigValidator.ts';
+import { parseFishConfig, parseSkillConfig, parseSkillLibraryConfig, parseSkillLoadoutConfig, parseWorldConfig } from '../assets/scripts/data/ConfigValidator.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const readJson = (name) => JSON.parse(readFileSync(join(root, 'assets', 'resources', 'configs', name), 'utf8'));
@@ -15,6 +15,7 @@ test('鱼、技能和世界样例配置可校验', () => {
   assert.deepEqual(player.animationArtFacingDirections, { swim: 'right', bite: 'left', hurt: 'right' });
   assert.equal(parseSkillConfig(readJson('skill-basic-bite.json')).animationState, 'bite');
   const dash = parseSkillConfig(readJson('skill-dash-bite.json'));
+  assert.equal(dash.displayName, '鲫鱼抢食');
   assert.equal(dash.animationState, 'dashBite');
   assert.equal(dash.ui.slotIndex, 0);
   assert.equal(dash.clientEffect.kind, 'dashBite');
@@ -38,9 +39,23 @@ test('鱼、技能和世界样例配置可校验', () => {
   assert.equal(inkSplash.animationState, 'inkSplash');
   assert.equal(inkSplash.clientEffect.kind, 'inkSplash');
   assert.equal(inkSplash.clientEffect.rayCount, 16);
+  const orcaCharge = parseSkillConfig(readJson('skill-orca-charge.json'));
+  assert.equal(orcaCharge.id, 'skill-orca-charge');
+  assert.equal(orcaCharge.animationState, 'orcaCharge');
+  assert.equal(orcaCharge.damage, 60);
+  assert.equal(orcaCharge.range, 900);
+  assert.equal(orcaCharge.knockbackDistance, 360);
+  assert.equal(orcaCharge.targetStopDistance, 96);
+  assert.equal(orcaCharge.clientEffect.kind, 'orcaCharge');
+  assert.equal(orcaCharge.ui.iconPath, 'art/ui/skill-orca-charge');
   const loadout = parseSkillLoadoutConfig(readJson('skill-loadout-player.json'));
   assert.deepEqual(loadout.layout.arcAngles, [190, 155, 120, 85]);
   assert.equal(loadout.skillConfigPaths.length, 5);
+  const library = parseSkillLibraryConfig(readJson('skill-library-player.json'));
+  assert.equal(library.id, 'player-skill-library');
+  assert.equal(library.skillConfigPaths.length, 6);
+  assert.ok(loadout.skillConfigPaths.every((path) => library.skillConfigPaths.includes(path)));
+  assert.ok(library.skillConfigPaths.includes('configs/skill-orca-charge'));
   const world = parseWorldConfig(readJson('world-sea-001.json'));
   assert.equal(world.maxActiveFish, 30);
   assert.equal(world.maxFullUpdateFish, 16);
@@ -55,4 +70,5 @@ test('配置校验拒绝错误版本和非法数值', () => {
   assert.throws(() => parseSkillConfig({ ...readJson('skill-basic-bite.json'), ui: { ...readJson('skill-basic-bite.json').ui, slot: 'corner' } }), /ui\.slot/);
   assert.throws(() => parseSkillLoadoutConfig({ ...readJson('skill-loadout-player.json'), layout: { ...readJson('skill-loadout-player.json').layout, arcAngles: [] } }), /arcAngles/);
   assert.throws(() => parseSkillLoadoutConfig({ ...readJson('skill-loadout-player.json'), skillConfigPaths: ['configs/skill-basic-bite', 'configs/skill-basic-bite'] }), /duplicates/);
+  assert.throws(() => parseSkillLibraryConfig({ ...readJson('skill-library-player.json'), skillConfigPaths: [] }), /non-empty/);
 });

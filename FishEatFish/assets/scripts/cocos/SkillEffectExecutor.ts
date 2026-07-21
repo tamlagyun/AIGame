@@ -21,8 +21,14 @@ export class SkillEffectExecutor {
 
   public activate(skill: SkillConfig): boolean {
     if (!this.hooks.canActivate()) return false;
-    if ((skill.clientEffect.kind === 'whaleSwallow' || skill.clientEffect.kind === 'inkSplash') && this.hooks.isOfflineMode()) {
-      this.hooks.showHint(skill.clientEffect.kind === 'inkSplash' ? '大王喷墨需要连接多人房间' : '鲸吞需要连接多人房间并锁定其它玩家');
+    if ((skill.clientEffect.kind === 'whaleSwallow' || skill.clientEffect.kind === 'inkSplash' || skill.clientEffect.kind === 'orcaCharge') && this.hooks.isOfflineMode()) {
+      this.hooks.showHint(
+        skill.clientEffect.kind === 'inkSplash'
+          ? '大王喷墨需要连接多人房间'
+          : skill.clientEffect.kind === 'orcaCharge'
+            ? '虎鲸冲刺需要连接多人房间并锁定前方玩家'
+            : '鲸吞需要连接多人房间并锁定其它玩家'
+      );
       return false;
     }
     const position = this.hooks.getPlayerPosition();
@@ -31,7 +37,9 @@ export class SkillEffectExecutor {
     const radians = angle * Math.PI / 180;
     const effect = skill.clientEffect;
     this.hooks.startAction(skill.animationState, effect.animationDurationSeconds);
-    if (effect.kind === 'dashBite') {
+    if (effect.kind === 'orcaCharge') {
+      this.hooks.createDashEffect(position.x, position.y, angle);
+    } else if (effect.kind === 'dashBite') {
       this.hooks.createDashEffect(position.x, position.y, angle);
       const next = this.hooks.moveDash(skill.dashDistance, angle);
       this.hooks.createBiteEffect(

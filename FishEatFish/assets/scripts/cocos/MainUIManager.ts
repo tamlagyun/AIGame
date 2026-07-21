@@ -1,14 +1,18 @@
 import { Color, EventTouch, ImageAsset, Label, Node, Sprite, SpriteFrame, Texture2D, UITransform, Widget } from 'cc';
 import type { SkillConfig, SkillLoadoutConfig } from '../core/types.ts';
+import { SkillLoadoutStore } from '../data/SkillLoadoutStore.ts';
 import { SkillActionPanel } from './SkillActionPanel.ts';
+import { SkillLoadoutDialog } from './SkillLoadoutDialog.ts';
 
 export interface MainUIManagerOptions {
   hudRoot: Node;
   joystickBase: ImageAsset;
   joystickKnob: ImageAsset;
   skillLoadout: SkillLoadoutConfig;
+  allSkills: SkillConfig[];
   skills: SkillConfig[];
   skillImages: Map<string, ImageAsset>;
+  skillEntryImage: ImageAsset;
   onSkillActivate: (skill: SkillConfig) => boolean;
   onJoystickStart: (event: EventTouch) => void;
   onJoystickMove: (event: EventTouch) => void;
@@ -24,6 +28,7 @@ export class MainUIManager {
   public readonly joystickRoot: Node;
   public readonly joystickKnob: Node;
   public readonly skillPanel: SkillActionPanel;
+  public readonly skillLoadoutDialog: SkillLoadoutDialog;
 
   public constructor(options: MainUIManagerOptions) {
     this.inputLayer = this.resolveInputLayer(options.hudRoot);
@@ -38,7 +43,30 @@ export class MainUIManager {
     this.joystickRoot.on(Node.EventType.TOUCH_MOVE, options.onJoystickMove);
     this.joystickRoot.on(Node.EventType.TOUCH_END, options.onJoystickEnd);
     this.joystickRoot.on(Node.EventType.TOUCH_CANCEL, options.onJoystickEnd);
-    this.skillPanel = new SkillActionPanel(this.inputLayer, options.skillLoadout, options.skills, options.skillImages, options.onSkillActivate);
+    const primarySkill = options.skills.find((skill) => skill.ui.slot === 'primary');
+    if (!primarySkill) throw new Error('默认技能栏缺少普通攻击');
+    const loadoutStore = new SkillLoadoutStore(options.allSkills, options.skills);
+    this.skillPanel = new SkillActionPanel(
+      this.inputLayer,
+      options.skillLoadout,
+      [primarySkill, ...loadoutStore.getEquippedSkills()],
+      options.skillImages,
+      options.onSkillActivate
+    );
+    this.skillLoadoutDialog = new SkillLoadoutDialog({
+      parent: this.inputLayer,
+      entryImage: options.skillEntryImage,
+      skillImages: options.skillImages,
+      getEquippedSkills: () => loadoutStore.getEquippedSkills(),
+      getAvailableSkills: () => loadoutStore.getAvailableSkills(),
+      onReplace: (slotIndex, skillId) => {
+        if (!loadoutStore.replace(slotIndex, skillId)) return false;
+        const replacement = loadoutStore.getEquippedSkills()[slotIndex];
+        if (!replacement) return false;
+        this.skillPanel.replaceArcSkill(slotIndex, replacement);
+        return true;
+      }
+    });
   }
 
   private resolveInputLayer(hudRoot: Node): Node {

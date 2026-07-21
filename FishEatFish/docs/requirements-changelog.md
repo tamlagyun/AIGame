@@ -76,3 +76,6 @@
 | 0.2.41 | 2026-07-17 | 将技能名称描边从 4 px 调整为 2 px，避免描边过粗造成文字和背景发黑 | SkillActionPanel、UI 布局规则 | 已实施，待 IDE/Web 视觉验收 |
 | 0.2.42 | 2026-07-17 | 为鱼儿头顶血量数字和用户名启用深色 2 px Label 描边，保持血条与名字的独立 HUD 跟随逻辑不变 | FishHealthBarOverlay、FishNameOverlay、UI 布局规则 | 已实施，待 IDE/Web 视觉验收 |
 | 0.2.43 | 2026-07-17 | 修正血量和名字描边未参与渲染：显式锁定系统字体与 `Label.CacheMode.NONE`，技能名称同步补齐相同前置条件 | 三个 HUD Label 组件、UI 布局规则与回归测试 | 已实施，待 IDE/Web 视觉验收 |
+| 0.2.44 | 2026-07-21 | 新增右上技能配置入口、技能库与四槽位装配界面；支持选择 1—4 号槽位后替换未装备技能、立即刷新主技能栏并本地持久化；生成并接入 `ART-PROMPT-UI-0010 v1` 正式入口图标 | SkillLibrary、SkillLoadoutStore、SkillLoadoutDialog、SkillActionPanel、MainUIManager、美术资源、需求与 UI 文档 | 已实施，待 IDE/Web 视觉验收 |
+| 0.2.45 | 2026-07-21 | 新增未默认装配的“虎鲸冲刺”：服务器锁定前方最近目标，权威冲刺、造成 60 点伤害并顶退 360 世界单位；客户端同步攻击、受击和顶飞弧线；技能进入替换界面但不改变默认四技能；生成并接入 `ART-PROMPT-UI-0011 v1` 正式图标 | skill-orca-charge、CombatService、Room、实时协议、Player、SkillEffectExecutor、技能库、美术资源与需求档案 | 已实施，待 IDE/Web 双端联机验收 |
+| 0.2.46 | 2026-07-21 | 将原“冲刺撕咬”的玩家可见名称改为“鲫鱼抢食”；保留稳定 ID `skill-dash-bite`、现有图标、动作、伤害、冷却、服务端结算与存档协议不变 | skill-dash-bite 配置、技能栏 UI、README、需求与 UI 文档 | 已实施，待 IDE/Web 文字视觉验收 |

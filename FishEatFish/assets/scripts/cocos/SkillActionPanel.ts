@@ -12,18 +12,47 @@ export class SkillActionPanel {
   private readonly cooldownStates = new Map<string, CooldownState>();
   private readonly cooldownMasks: CooldownMask[] = [];
   private readonly skillsByNetworkId = new Map<string, SkillConfig>();
+  private readonly root: Node;
+  private skills: SkillConfig[];
 
   public constructor(
     private readonly parent: Node,
     private readonly loadout: SkillLoadoutConfig,
-    private readonly skills: SkillConfig[],
+    skills: SkillConfig[],
     private readonly images: Map<string, ImageAsset>,
     private readonly onActivate: (skill: SkillConfig) => boolean
   ) {
+    this.skills = [...skills];
+    const { layout } = this.loadout;
+    this.root = this.createContainer(this.parent, layout.rootName, layout.width, layout.height);
+    this.alignToBottomRight(this.root, layout.right, layout.bottom);
+    this.validateAndRegisterSkills();
+    this.renderButtons();
+  }
+
+  public replaceArcSkill(slotIndex: number, skill: SkillConfig): void {
+    const index = this.skills.findIndex((current) => current.ui.slot === 'arc' && current.ui.slotIndex === slotIndex);
+    if (index < 0) throw new Error(`skill arc slot does not exist: ${slotIndex}`);
+    this.skills[index] = {
+      ...skill,
+      ui: { ...skill.ui, slot: 'arc', slotIndex, nodeName: `SkillSlot${slotIndex + 1}Button` }
+    };
+    this.validateAndRegisterSkills();
+    this.renderButtons();
+  }
+
+  public getEquippedArcSkills(): SkillConfig[] {
+    return this.skills
+      .filter((skill) => skill.ui.slot === 'arc')
+      .sort((left, right) => (left.ui.slotIndex ?? 0) - (right.ui.slotIndex ?? 0));
+  }
+
+  private validateAndRegisterSkills(): void {
     const nodeNames = new Set<string>();
     const slots = new Set<string>();
     let primaryCount = 0;
-    for (const skill of skills) {
+    this.skillsByNetworkId.clear();
+    for (const skill of this.skills) {
       if (nodeNames.has(skill.ui.nodeName)) throw new Error(`duplicate skill UI node: ${skill.ui.nodeName}`);
       nodeNames.add(skill.ui.nodeName);
       const slot = skill.ui.slot === 'primary' ? 'primary' : `arc-${skill.ui.slotIndex}`;
@@ -36,7 +65,6 @@ export class SkillActionPanel {
       if (!current) this.cooldownStates.set(skill.ui.cooldownGroup, { duration: skill.cooldownSeconds, remaining: 0 });
     }
     if (primaryCount !== 1) throw new Error('skill loadout must contain exactly one primary skill');
-    this.create();
   }
 
   public update(deltaTime: number): void {
@@ -52,16 +80,16 @@ export class SkillActionPanel {
     this.updateCooldownMasks();
   }
 
-  private create(): void {
+  private renderButtons(): void {
+    for (const child of [...this.root.children]) child.destroy();
+    this.cooldownMasks.length = 0;
     const { layout } = this.loadout;
-    const root = this.createContainer(this.parent, layout.rootName, layout.width, layout.height);
-    this.alignToBottomRight(root, layout.right, layout.bottom);
     for (const skill of this.skills) {
       const position = this.resolvePosition(skill);
       const size = skill.ui.slot === 'primary' ? layout.primaryButtonSize : layout.arcButtonSize;
       const image = this.images.get(skill.id);
       if (!image) throw new Error(`missing UI image for skill: ${skill.id}`);
-      const button = this.createSprite(root, skill.ui.nodeName, image, size, size, position.x, position.y);
+      const button = this.createSprite(this.root, skill.ui.nodeName, image, size, size, position.x, position.y);
       this.createCooldownMask(button, skill);
       this.createButtonLabel(button, skill.displayName);
       this.bindButton(button, skill);

@@ -30,11 +30,13 @@ export interface SkillConfig {
   id: string;
   displayName: string;
   networkSkillId: string;
-  animationState: 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash';
+  animationState: 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash' | 'orcaCharge';
   damage: number;
   range: number;
   cooldownSeconds: number;
   dashDistance: number;
+  knockbackDistance?: number;
+  targetStopDistance?: number;
   ui: {
     nodeName: string;
     slot: 'primary' | 'arc';
@@ -43,7 +45,7 @@ export interface SkillConfig {
     cooldownGroup: string;
   };
   clientEffect: {
-    kind: 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash';
+    kind: 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash' | 'orcaCharge';
     animationDurationSeconds: number;
     visualOffset: number;
     visualRadius: number;
@@ -77,6 +79,12 @@ export interface SkillLoadoutConfig {
     arcButtonSize: number;
     cooldownStart: number;
   };
+  skillConfigPaths: string[];
+}
+
+export interface SkillLibraryConfig {
+  schemaVersion: 2;
+  id: string;
   skillConfigPaths: string[];
 }
 

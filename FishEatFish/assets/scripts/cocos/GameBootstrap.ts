@@ -26,7 +26,7 @@ import {
 } from 'cc';
 import { moveWithinBounds, shouldFlipArtFrame } from '../core/MovementSystem.ts';
 import type { ArtFacingDirection, SkillConfig, Vec2Value } from '../core/types.ts';
-import { parseFishConfig, parseSkillConfig, parseSkillLoadoutConfig } from '../data/ConfigValidator.ts';
+import { parseFishConfig, parseSkillConfig, parseSkillLibraryConfig, parseSkillLoadoutConfig } from '../data/ConfigValidator.ts';
 import { SkillCatalog } from '../data/SkillCatalog.ts';
 import { createPlatformService } from '../platform/PlatformAdapters.ts';
 import { RealtimeSession } from '../network/RealtimeSession.ts';
@@ -84,7 +84,7 @@ export class GameBootstrap extends Component {
   private localActionSequence = 0;
   private swimFrameIndex = 0;
   private animationElapsed = 0;
-  private fishActionState: 'swim' | 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash' | 'hurt' = 'swim';
+  private fishActionState: 'swim' | 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash' | 'orcaCharge' | 'hurt' = 'swim';
   private fishActionElapsed = 0;
   private fishActionDuration = 0;
   private readonly pressedKeys = new Set<KeyCode>();
@@ -178,14 +178,23 @@ export class GameBootstrap extends Component {
     if (!worldRoot || !playerLayer || !this.cameraNode || !this.hudRoot) {
       throw new Error('MainScene 缺少世界、玩家、镜头或 HUD 节点。');
     }
-    const [playerFishConfigRaw, skillLoadoutRaw] = await Promise.all([
+    const [playerFishConfigRaw, skillLoadoutRaw, skillLibraryRaw] = await Promise.all([
       this.loadJson('configs/fish-player'),
-      this.loadJson('configs/skill-loadout-player')
+      this.loadJson('configs/skill-loadout-player'),
+      this.loadJson('configs/skill-library-player')
     ]);
     const playerFishConfig = parseFishConfig(playerFishConfigRaw);
     const skillLoadout = parseSkillLoadoutConfig(skillLoadoutRaw);
-    const skills = await Promise.all(skillLoadout.skillConfigPaths.map(async (path) => parseSkillConfig(await this.loadJson(path))));
-    this.skillCatalog = new SkillCatalog(skills);
+    const skillLibrary = parseSkillLibraryConfig(skillLibraryRaw);
+    const loadedSkillEntries = await Promise.all(skillLibrary.skillConfigPaths.map(async (path) => ({ path, skill: parseSkillConfig(await this.loadJson(path)) })));
+    const skillByPath = new Map(loadedSkillEntries.map((entry) => [entry.path, entry.skill]));
+    const allSkills = loadedSkillEntries.map((entry) => entry.skill);
+    const skills = skillLoadout.skillConfigPaths.map((path) => {
+      const skill = skillByPath.get(path);
+      if (!skill) throw new Error(`默认技能不在技能库中：${path}`);
+      return skill;
+    });
+    this.skillCatalog = new SkillCatalog(allSkills);
     this.artFacingDirection = playerFishConfig.artFacingDirection;
     // WorldRoot、HudRoot 和 MainCamera 共用 Canvas 中心作为局部原点。
     // Canvas 的锚点换算由引擎负责，子根节点不得再次减去半屏尺寸。
@@ -200,13 +209,14 @@ export class GameBootstrap extends Component {
       this.loadImage('art/ui/joystick-knob'),
       this.loadImage('art/ui/health-bar-frame'),
       this.loadImage('art/ui/health-bar-fill'),
-      ...skills.map((skill) => this.loadImage(skill.ui.iconPath))
+      this.loadImage('art/ui/skill-loadout-entry'),
+      ...allSkills.map((skill) => this.loadImage(skill.ui.iconPath))
     ]);
     const fishImages = images.slice(0, 6);
     const biteImages = images.slice(6, 14);
     const hurtImages = images.slice(14, 22);
-    const [joystickBase, joystickKnob, healthBarFrame, healthBarFill, ...skillImageAssets] = images.slice(22);
-    skills.forEach((skill, index) => skillImages.set(skill.id, skillImageAssets[index] as ImageAsset));
+    const [joystickBase, joystickKnob, healthBarFrame, healthBarFill, skillEntryImage, ...skillImageAssets] = images.slice(22);
+    allSkills.forEach((skill, index) => skillImages.set(skill.id, skillImageAssets[index] as ImageAsset));
 
     const background = new Node('OceanMap');
     background.layer = worldRoot.layer;
@@ -228,8 +238,10 @@ export class GameBootstrap extends Component {
       joystickBase,
       joystickKnob,
       skillLoadout,
+      allSkills,
       skills,
       skillImages,
+      skillEntryImage: skillEntryImage as ImageAsset,
       onSkillActivate: (skill) => this.skillExecutor?.activate(skill) ?? false,
       onJoystickStart: this.onJoystickTouchStart,
       onJoystickMove: this.onJoystickTouchMove,
@@ -287,7 +299,7 @@ export class GameBootstrap extends Component {
             skill.clientEffect.expansionDurationSeconds ?? 0.5
           );
         }
-        if (skill.clientEffect.kind === 'dashBite') this.createDashEffect(node.position.x, node.position.y, role.facingAngle);
+        if (skill.clientEffect.kind === 'dashBite' || skill.clientEffect.kind === 'orcaCharge') this.createDashEffect(node.position.x, node.position.y, role.facingAngle);
         if (skill.clientEffect.kind !== 'inkSplash') this.createBiteEffect(
           node.position.x + Math.cos(radians) * skill.clientEffect.visualOffset,
           node.position.y,
@@ -310,6 +322,7 @@ export class GameBootstrap extends Component {
         this.applyWhaleOpacity(role, effectDurationMs ?? this.getWhaleEffectDurationMs());
       },
       playDeathRollTarget: (effectDurationMs?: number) => role.startVisualRoll((effectDurationMs ?? 1150) / 1000),
+      playKnockback: (targetX: number, targetY: number, effectDurationMs?: number) => role.playKnockback(targetX, targetY, (effectDurationMs ?? 650) / 1000),
       playHurt: (skillId: string) => {
         const duration = this.getConfiguredNetworkSkill(skillId)?.clientEffect.animationDurationSeconds ?? 0.34;
         this.playRemoteFishAnimation(sprite, this.hurtFrames, duration);
@@ -341,6 +354,10 @@ export class GameBootstrap extends Component {
 
   private isWhaleSwallowNetworkSkill(networkSkillId: string): boolean {
     return this.getConfiguredNetworkSkill(networkSkillId)?.clientEffect.kind === 'whaleSwallow';
+  }
+
+  private isOrcaChargeNetworkSkill(networkSkillId: string): boolean {
+    return this.getConfiguredNetworkSkill(networkSkillId)?.clientEffect.kind === 'orcaCharge';
   }
 
   private getWhaleSkill(): SkillConfig | undefined {
@@ -553,6 +570,7 @@ export class GameBootstrap extends Component {
     } else if (message.type === 'skillEffect') {
       const effect = message.payload as SkillEffect;
       if (this.isWhaleSwallowNetworkSkill(effect.skillId)) this.handleWhaleSwallowEffect(effect);
+      else if (this.isOrcaChargeNetworkSkill(effect.skillId)) this.handleOrcaChargeEffect(effect);
       else if (effect.playerId === this.networkPlayerId) {
         if (this.getConfiguredNetworkSkill(effect.skillId)?.clientEffect.kind === 'deathRoll' && effect.targetId) {
           this.remotePlayers?.playDeathRollTarget(effect.targetId, effect.effectDurationMs ?? 1150);
@@ -567,10 +585,11 @@ export class GameBootstrap extends Component {
     } else if (message.type === 'skillResolved') {
       const result = message.payload as SkillResolved;
       if (result.playerId === this.networkPlayerId && this.actionHint) {
-        if (this.isWhaleSwallowNetworkSkill(result.skillId) && result.reason === 'noTarget') {
+        if ((this.isWhaleSwallowNetworkSkill(result.skillId) || this.isOrcaChargeNetworkSkill(result.skillId)) && result.reason === 'noTarget') {
           this.skillPanel?.cancelCooldownForNetworkSkill(result.skillId);
-          this.actionHint.string = '鲸吞范围内没有可用目标';
+          this.actionHint.string = this.isOrcaChargeNetworkSkill(result.skillId) ? '虎鲸冲刺前方没有可锁定目标' : '鲸吞范围内没有可用目标';
         } else if (!result.reason && this.isWhaleSwallowNetworkSkill(result.skillId)) this.actionHint.string = `鲸吞已锁定目标，效果持续 ${this.getWhaleEffectDurationMs() / 1000} 秒`;
+        else if (!result.reason && this.isOrcaChargeNetworkSkill(result.skillId)) this.actionHint.string = '虎鲸冲刺命中：造成 60 点伤害并顶飞目标';
         else if (!result.reason) this.actionHint.string = result.hitCount > 0 ? `命中 ${result.hitCount} 名玩家` : '未命中：靠近并面向对方后再撕咬';
         else if (result.reason === 'cooldown') this.actionHint.string = '技能冷却中';
         else if (result.reason === 'dead') this.actionHint.string = '死亡期间不能攻击';
@@ -655,6 +674,24 @@ export class GameBootstrap extends Component {
     ) {
       this.localWhaleTargetSequences.set(effect.playerId, effect.actionSequence);
       if (this.localPlayer) this.applyWhaleOpacity(this.localPlayer, durationMs);
+    }
+  }
+
+  private handleOrcaChargeEffect(effect: SkillEffect): void {
+    const durationMs = effect.effectDurationMs ?? 650;
+    if (effect.playerId === this.networkPlayerId) {
+      this.localPlayer?.setPosition(effect.x, effect.y);
+      this.followPlayer(effect.x, effect.y);
+    } else {
+      this.remotePlayers?.setTransform(effect.playerId, effect.x, effect.y, effect.rotation);
+      this.remotePlayers?.playSkill(effect.playerId, effect.skillId, effect.actionSequence, effect.targetId, durationMs);
+    }
+    if (!effect.targetId || effect.targetX === undefined || effect.targetY === undefined) return;
+    if (effect.targetId === this.networkPlayerId) {
+      this.localPlayer?.playKnockback(effect.targetX, effect.targetY, durationMs / 1000);
+      this.followPlayer(effect.targetX, effect.targetY);
+    } else {
+      this.remotePlayers?.playKnockback(effect.targetId, effect.targetX, effect.targetY, durationMs);
     }
   }
 
@@ -751,7 +788,7 @@ export class GameBootstrap extends Component {
     this.realtime.sendSkill({ skillId: skillId as SkillId, clientTick: ++this.networkClientTick, x: position.x, y: position.y, rotation: player.facingAngle });
   }
 
-  private startFishAction(state: 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash' | 'hurt', duration: number): void {
+  private startFishAction(state: 'bite' | 'dashBite' | 'whaleSwallow' | 'deathRoll' | 'inkSplash' | 'orcaCharge' | 'hurt', duration: number): void {
     this.fishActionState = state;
     this.fishActionElapsed = 0;
     this.fishActionDuration = duration;

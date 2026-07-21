@@ -6,6 +6,7 @@ export interface RemotePlayerView {
   playSkill?(skillId: SkillId, effectDurationMs?: number): void;
   playWhaleTarget?(effectDurationMs?: number): void;
   playDeathRollTarget?(effectDurationMs?: number): void;
+  playKnockback?(targetX: number, targetY: number, effectDurationMs?: number): void;
   playHurt?(skillId: string): void;
   playDeath?(): void;
   playRespawn?(): void;
@@ -60,6 +61,7 @@ export class RemotePlayerRegistry {
   }
   playWhaleTarget(playerId: string, effectDurationMs = 3000) { this.views.get(playerId)?.playWhaleTarget?.(effectDurationMs); }
   playDeathRollTarget(playerId: string, effectDurationMs = 1150) { this.views.get(playerId)?.playDeathRollTarget?.(effectDurationMs); }
+  playKnockback(playerId: string, targetX: number, targetY: number, effectDurationMs = 650) { this.views.get(playerId)?.playKnockback?.(targetX, targetY, effectDurationMs); }
   playHurt(playerId: string, skillId: string) { this.views.get(playerId)?.playHurt?.(skillId); }
   playDeath(playerId: string) { this.views.get(playerId)?.playDeath?.(); }
   playRespawn(playerId: string) { this.views.get(playerId)?.playRespawn?.(); }

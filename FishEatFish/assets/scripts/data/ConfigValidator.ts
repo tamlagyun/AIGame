@@ -1,4 +1,4 @@
-import { CONFIG_SCHEMA_VERSION, type FishConfig, type SkillConfig, type SkillLoadoutConfig, type WorldConfig } from '../core/types.ts';
+import { CONFIG_SCHEMA_VERSION, type FishConfig, type SkillConfig, type SkillLibraryConfig, type SkillLoadoutConfig, type WorldConfig } from '../core/types.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -44,13 +44,15 @@ export const parseFishConfig = (value: unknown): FishConfig => {
 
 export const parseSkillConfig = (value: unknown): SkillConfig => {
   const config = requireBase(value, 'skill');
-  if (config.animationState !== 'bite' && config.animationState !== 'dashBite' && config.animationState !== 'whaleSwallow' && config.animationState !== 'deathRoll' && config.animationState !== 'inkSplash') {
-    throw new Error('animationState must be bite, dashBite, whaleSwallow, deathRoll or inkSplash');
+  if (config.animationState !== 'bite' && config.animationState !== 'dashBite' && config.animationState !== 'whaleSwallow' && config.animationState !== 'deathRoll' && config.animationState !== 'inkSplash' && config.animationState !== 'orcaCharge') {
+    throw new Error('animationState must be bite, dashBite, whaleSwallow, deathRoll, inkSplash or orcaCharge');
   }
   requireNonNegative(config.damage, 'damage');
   requirePositive(config.range, 'range');
   requireNonNegative(config.cooldownSeconds, 'cooldownSeconds');
   requireNonNegative(config.dashDistance, 'dashDistance');
+  if (config.knockbackDistance !== undefined) requirePositive(config.knockbackDistance, 'knockbackDistance');
+  if (config.targetStopDistance !== undefined) requirePositive(config.targetStopDistance, 'targetStopDistance');
   if (typeof config.networkSkillId !== 'string' || config.networkSkillId.length === 0) throw new Error('networkSkillId is required');
   if (!isRecord(config.ui)) throw new Error('ui must be an object');
   if (typeof config.ui.nodeName !== 'string' || config.ui.nodeName.length === 0) throw new Error('ui.nodeName is required');
@@ -60,7 +62,7 @@ export const parseSkillConfig = (value: unknown): SkillConfig => {
   if (typeof config.ui.iconPath !== 'string' || config.ui.iconPath.length === 0) throw new Error('ui.iconPath is required');
   if (typeof config.ui.cooldownGroup !== 'string' || config.ui.cooldownGroup.length === 0) throw new Error('ui.cooldownGroup is required');
   if (!isRecord(config.clientEffect)) throw new Error('clientEffect must be an object');
-  if (config.clientEffect.kind !== 'bite' && config.clientEffect.kind !== 'dashBite' && config.clientEffect.kind !== 'whaleSwallow' && config.clientEffect.kind !== 'deathRoll' && config.clientEffect.kind !== 'inkSplash') throw new Error('clientEffect.kind is invalid');
+  if (config.clientEffect.kind !== 'bite' && config.clientEffect.kind !== 'dashBite' && config.clientEffect.kind !== 'whaleSwallow' && config.clientEffect.kind !== 'deathRoll' && config.clientEffect.kind !== 'inkSplash' && config.clientEffect.kind !== 'orcaCharge') throw new Error('clientEffect.kind is invalid');
   requirePositive(config.clientEffect.animationDurationSeconds, 'clientEffect.animationDurationSeconds');
   requireNonNegative(config.clientEffect.visualOffset, 'clientEffect.visualOffset');
   requirePositive(config.clientEffect.visualRadius, 'clientEffect.visualRadius');
@@ -96,6 +98,17 @@ export const parseSkillLoadoutConfig = (value: unknown): SkillLoadoutConfig => {
   if (!Array.isArray(config.skillConfigPaths) || config.skillConfigPaths.length === 0 || config.skillConfigPaths.some((path) => typeof path !== 'string' || path.length === 0)) throw new Error('skillConfigPaths must be a non-empty string array');
   if (new Set(config.skillConfigPaths).size !== config.skillConfigPaths.length) throw new Error('skillConfigPaths must not contain duplicates');
   return config as unknown as SkillLoadoutConfig;
+};
+
+export const parseSkillLibraryConfig = (value: unknown): SkillLibraryConfig => {
+  const config = requireBase(value, 'skill library');
+  if (!Array.isArray(config.skillConfigPaths) || config.skillConfigPaths.length === 0 || config.skillConfigPaths.some((path) => typeof path !== 'string' || path.length === 0)) {
+    throw new Error('skill library skillConfigPaths must be a non-empty string array');
+  }
+  if (new Set(config.skillConfigPaths).size !== config.skillConfigPaths.length) {
+    throw new Error('skill library skillConfigPaths must not contain duplicates');
+  }
+  return config as unknown as SkillLibraryConfig;
 };
 
 export const parseWorldConfig = (value: unknown): WorldConfig => {
